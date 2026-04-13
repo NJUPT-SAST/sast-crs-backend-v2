@@ -5,7 +5,9 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sast.crs.constant.RedisKeyConst;
 import com.sast.crs.entity.*;
 import com.sast.crs.enums.ErrorEnum;
@@ -91,18 +93,28 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public Map<String, Object> getSignedComList(@NotNull User user, Integer cur, Integer limit) {
+    public Map<String, Object> getSignedComList(@NotNull String userCode, Integer cur, Integer limit) {
         // 这里仅查询队长，之后需要能查询到队员
-        List<Team> teams = teamMapper.selectList(new LambdaQueryWrapper<Team>()
-                .eq(Team::getCaptain, user.getCode()));
-        List<Competition> competitions = new LinkedList<>();
-        teams.forEach(team -> {
-            Competition competition = competitionMapper.selectById(team.getComId());
-            if (competition == null)
-                log.warn("数据库中不存在 ComId 为 {} 的比赛，请检查 Competition 表！", team.getComId());
-            else competitions.add(competition);
-        });
-        return resultComListMap(competitions, cur, limit);
+        Page<Competition> page = new Page<>(cur, limit);
+        IPage<Competition> pageRes = competitionMapper.selectSignedCompetitions(page, userCode);
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> records = new LinkedList<>();
+        for (Competition competition : pageRes.getRecords()) {
+            String url = competition.getCover();
+            Map<String, Object> record = new HashMap<>();
+            record.put("id", competition.getId());
+            record.put("name", competition.getName());
+            record.put("cover", StringUtils.isEmpty(url) ? defaultCover : url);
+            record.put("intro", CommonUtil.getSpecifiedString(competition.getIntroduce(), 30));
+            record.put("date", formatDateTime(competition.getRegBeginTime()));
+            record.put("status", getCompetitionStatus(competition));
+            records.add(record);
+        }
+        result.put("records", records);
+        result.put("total", pageRes.getTotal());
+        result.put("pageNum", pageRes.getCurrent());
+        result.put("pageSize", pageRes.getSize());
+        return result;
     }
 
     @Override

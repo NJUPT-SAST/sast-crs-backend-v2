@@ -6,4 +6,11 @@
         FROM competition
         WHERE id = #{id}
     </select>
+    <select id="selectSignedCompetitions" resultType="com.sast.crs.entity.Competition">
+        SELECT c.*
+        FROM team t
+                 JOIN competition c ON c.id = t.com_id
+        WHERE t.captain = #{userCode}
+        ORDER BY t.id DESC
+    </select>
 </mapper>

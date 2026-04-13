@@ -9,7 +9,7 @@ import java.util.Map;
 
 public interface UserService {
     Map<String, Object> getAllComList(Integer cur, Integer limit);
-    Map<String, Object> getSignedComList(User user, Integer cur, Integer limit);
+    Map<String, Object> getSignedComList(String userCode, Integer cur, Integer limit);
     Map<String, Object> getComInfo(Long comId);
     Map<String, Object> getComSignUpInfo(Long comId);
     Map<String, Object> searchComName(String key, Integer cur, Integer limit);

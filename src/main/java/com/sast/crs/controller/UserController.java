@@ -51,7 +51,7 @@ public class UserController {
     public Map<String, Object> getSignedComList(@RequestParam(defaultValue = "1") Integer cur,
                                                 @RequestParam(defaultValue = "10") Integer limit) {
         User user = UserInterceptor.userHolder.get();
-        return userService.getSignedComList(user, cur, limit);
+        return userService.getSignedComList(user.getCode(), cur, limit);
     }
 
     /**
