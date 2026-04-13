@@ -7,4 +7,34 @@
         WHERE com_id = #{comId}
         LIMIT #{pageSize} OFFSET #{pageNum}
     </select>
+    <resultMap id="ListForExcelMap" type="com.sast.crs.model.WorkForExcel">
+        <result column="id"             property="id"/>
+        <result column="work_name"      property="workName"/>
+        <result column="user_code"      property="userCode"/>
+        <result column="comName"        property="comName"/>
+        <result column="teamName"       property="teamName"/>
+        <result column="memberJson"     property="memberJson"/>
+        <result column="captainName"    property="captainName"/>
+        <result column="schema_content" property="schemaContent"/>
+    </resultMap>
+    <select id="selectListForExcel" resultMap="ListForExcelMap">
+        SELECT w.id,
+               w.work_name,
+               w.user_code,
+               c.name   AS comName,
+               t.name   AS teamName,
+               t.member AS memberJson,
+               u.name   AS captainName,
+               w.schema_content
+        FROM work w
+                 JOIN team t
+                      ON t.com_id = w.com_id
+                          AND t.captain = w.user_code
+                 LEFT JOIN user u
+                           ON u.code = w.user_code
+                 JOIN competition c
+                      ON c.id = w.com_id
+        WHERE w.com_id = #{comId}
+        ORDER BY w.id DESC
+    </select>
 </mapper>
