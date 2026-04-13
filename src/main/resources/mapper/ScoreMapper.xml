@@ -37,13 +37,26 @@
     <!--获取评分作品列表-->
     <resultMap id="proListMap" type="com.sast.crs.model.ProgramListForScore">
         <id column="id" property="id"/>
-        <result column="work_name" property="title"/>
+        <result column="title" property="title"/>
+        <result column="score" property="score"/>
+        <result column="opinion" property="opinion"/>
     </resultMap>
     <select id="getProList" resultMap="com.sast.crs.mapper.ScoreMapper.proListMap">
-        SELECT id, work_name
-        FROM work
-        WHERE com_id = #{comId}
-          AND user_code IN (SELECT user_code FROM judge WHERE com_id = #{comId} AND judge_code = #{code})
+        SELECT w.id,
+               w.work_name AS title,
+               s.score     AS score,
+               s.opinion   AS opinion
+        FROM work w
+                 LEFT JOIN score s
+                           ON s.com_id = w.com_id
+                               AND s.user_code = w.user_code
+                               AND s.judge_code = #{code}
+        WHERE w.com_id = #{comId}
+          AND w.user_code IN (SELECT user_code
+                              FROM score
+                              WHERE com_id = #{comId}
+                                AND judge_code = #{code})
+        ORDER BY w.id DESC
     </select>
     <select id="getScore" resultType="java.lang.Integer">
         SELECT score

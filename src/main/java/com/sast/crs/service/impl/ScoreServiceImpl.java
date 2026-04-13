@@ -76,13 +76,8 @@ public class ScoreServiceImpl implements ScoreService {
         Integer current = Math.toIntExact(pages.getCurrent());
         Integer pageSize = Math.toIntExact(pages.getSize());
         Integer pageTotal = Math.toIntExact(pages.getPages());
-        List<ProgramListForScore> list = pages.getRecords().stream().peek(o -> {
-            o.setScore(scoreMapper.getScore(code, o.getId()));
-            o.setOpinion(scoreMapper.getOpinion(code, o.getId()));
-        }).collect(Collectors.toList());
-
         //返回结果
-        return new PageInfo<>(total, list, current, pageSize, pageTotal);
+        return new PageInfo<>(total, pages.getRecords(), current, pageSize, pageTotal);
     }
 
     @Override
