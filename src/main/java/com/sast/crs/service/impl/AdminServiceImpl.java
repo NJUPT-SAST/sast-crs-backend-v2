@@ -10,6 +10,7 @@ import com.sast.crs.exception.LocalRuntimeException;
 import com.sast.crs.mapper.*;
 import com.sast.crs.model.ComMangerVo;
 import com.sast.crs.model.CompetitionVO;
+import com.sast.crs.model.ProgramListForReview;
 import com.sast.crs.service.AdminService;
 import com.sast.crs.util.FileUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +33,6 @@ public class AdminServiceImpl implements AdminService {
     private final FileMapper fileMapper;
     private final ReviewMapper reviewMapper;
     private final TeamMapper teamMapper;
-    private final JudgeMapper judgeMapper;
     private final WorkMapper workMapper;
     private final DepartmentMapper departmentMapper;
     private final FileUtil fileUtil;
@@ -43,7 +43,6 @@ public class AdminServiceImpl implements AdminService {
         this.fileMapper = fileMapper;
         this.reviewMapper = reviewMapper;
         this.teamMapper = teamMapper;
-        this.judgeMapper = judgeMapper;
         this.workMapper = workMapper;
         this.departmentMapper = departmentMapper;
         this.fileUtil = fileUtil;
@@ -231,46 +230,19 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public Map<String, Object> getComMangerInfo(Integer pageNum, Integer pageSize, Long comId) {
-        // 结果集从 0 开始，所以这里要减一
-        List<Work> works = workMapper.getWorks((pageNum - 1) * pageSize, pageSize, comId);
+        // 比赛名
+        QueryWrapper<Competition> competitionQueryWrapper = new QueryWrapper<>();
+        competitionQueryWrapper.eq("id", comId);
+        String comName = adminMapper.selectOne(competitionQueryWrapper).getName();
         // 注册数
         Long regNum = teamMapper.selectCount(new QueryWrapper<Team>().eq("com_id", comId));
         // 提交材料数
         Long subNum = workMapper.selectCount(new QueryWrapper<Work>().eq("com_id", comId));
         // 已审批数
         Long revNum = reviewMapper.getReviewNum(comId);
-        ArrayList<ComMangerVo> resList = new ArrayList<>();
-        QueryWrapper<Judge> judgeQueryWrapper = new QueryWrapper<>();
-        works.forEach(work -> {
-            ArrayList<String> judges = new ArrayList<>();
-            ComMangerVo comMangerVo = new ComMangerVo();
-            String workName = work.getWorkName();
-            String userCode = work.getUserCode();
-            judgeQueryWrapper.eq("com_id", comId).eq("user_code", userCode);
-            List<Judge> judgeList = judgeMapper.selectList(judgeQueryWrapper);
-            judgeQueryWrapper.clear();
-            // 判断是否分配评委
-            if (judgeList.isEmpty()) {
-                comMangerVo.setIsAssignJudge(0);
-            } else {
-                judgeList.forEach(judge -> {
-                    if (!userIsExist(judge.getJudgeCode())) {
-                        throw new LocalRuntimeException(ErrorEnum.USER_NOT_EXIST);
-                    }
-                    String judgeName = userMapper.selectById(judge.getJudgeCode()).getName();
-                    judges.add(judgeName);
-                });
-                comMangerVo.setIsAssignJudge(1);
-            }
-            comMangerVo.setUserCode(userCode);
-            comMangerVo.setJudges(judges);
-            comMangerVo.setComId(comId);
-            comMangerVo.setFileName(workName);
-            resList.add(comMangerVo);
-        });
-        QueryWrapper<Competition> competitionQueryWrapper = new QueryWrapper<>();
-        competitionQueryWrapper.eq("id", comId);
-        String comName = adminMapper.selectOne(competitionQueryWrapper).getName();
+        Page<ComMangerVo> page = new Page<>(pageNum, pageSize);
+        page.setOptimizeCountSql(false);
+        List<ComMangerVo> resList = adminMapper.getComMangerInfo(page, comId).getRecords();
         // 返回结果集、提交作品数量、报名数、提交材料数、评审数
         return getComMangerMap(resList, Math.toIntExact(subNum), pageNum, pageSize, regNum, subNum, revNum, comName);
     }

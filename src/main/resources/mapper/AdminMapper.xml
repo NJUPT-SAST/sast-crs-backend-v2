@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sast.crs.mapper.AdminMapper">
+    <!--获取比赛作品列表-->
+    <resultMap id="ComMangerInfoMap" type="com.sast.crs.model.ComMangerVo">
+        <result column="comId"         property="comId"/>
+        <result column="fileName"      property="fileName"/>
+        <result column="userCode"      property="userCode"/>
+        <result column="isAssignJudge" property="isAssignJudge"/>
+        <result column="judges"        property="judges"
+                typeHandler="com.sast.crs.handler.CommaSeparatedStringToListTypeHandler"/>
+    </resultMap>
+    <select id="getComMangerInfo" resultMap="ComMangerInfoMap">
+        SELECT w.id,
+               w.com_id                                           AS comId,
+               w.work_name                                        AS fileName,
+               w.user_code                                        AS userCode,
+               CASE WHEN COUNT(j.id) = 0 THEN 0 ELSE 1 END        AS isAssignJudge,
+               GROUP_CONCAT(u.name ORDER BY u.name SEPARATOR ',') AS judges
+        FROM work w
+                 LEFT JOIN judge j
+                           ON j.com_id = w.com_id AND j.user_code = w.user_code
+                 LEFT JOIN user u
+                           ON u.code = j.judge_code
+        WHERE w.com_id = #{comId}
+        GROUP BY w.id, w.com_id, w.work_name, w.user_code
+        ORDER BY w.id DESC
+    </select>
+</mapper>
