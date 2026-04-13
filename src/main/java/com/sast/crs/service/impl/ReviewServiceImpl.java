@@ -64,21 +64,22 @@ public class ReviewServiceImpl implements ReviewService {
         Page<ProgramListForReview> page = new Page<>(pageNum, 10);
         page.setOptimizeCountSql(false);
         IPage<ProgramListForReview> pages;
-        List<Integer> list = new ArrayList<>();
-        if (setting != null & Objects.equals(setting, code)) {
+        if (setting != null && Objects.equals(setting, code)) {
+            List<Integer> depIds = new ArrayList<>();
             for (String key : settings.keySet()) {
                 if (!settings.getString(key).equals(code) & !key.equals("0")) {
-                    list.add(Integer.parseInt(key));
+                    depIds.add(Integer.parseInt(key));
                 }
             }
-            pages = reviewMapper.getProgramInfoNotIn(page, comId, list);
+            pages = reviewMapper.getProgramInfoNotIn(page, comId, depIds);
         } else {
+            List<Integer> depIds = new ArrayList<>();
             for (String key : settings.keySet()) {
                 if (settings.getString(key).equals(code)) {
-                    list.add(Integer.parseInt(key));
+                    depIds.add(Integer.parseInt(key));
                 }
             }
-            pages = reviewMapper.getProgramInfo(page, comId, list);
+            pages = reviewMapper.getProgramInfo(page, comId, depIds);
         }
         //重新包装
         Integer total = Math.toIntExact(pages.getTotal());
@@ -86,12 +87,6 @@ public class ReviewServiceImpl implements ReviewService {
         Integer pageSize = Math.toIntExact(pages.getSize());
         Integer pageTotal = Math.toIntExact(pages.getPages());
         List<ProgramListForReview> recordList = pages.getRecords();
-        for (ProgramListForReview l : recordList) {
-            ProgramListForReview DTO = reviewMapper.getProPass(comId, l.getUserCode());
-            if (DTO == null) continue;
-            l.setOpinion(DTO.getOpinion());
-            l.setIsPass(DTO.getIsPass());
-        }
         //返回结果
         return new PageInfo<>(total, recordList, current, pageSize, pageTotal);
     }

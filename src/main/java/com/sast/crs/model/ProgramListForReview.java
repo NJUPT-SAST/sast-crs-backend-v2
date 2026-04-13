@@ -13,6 +13,4 @@ public class ProgramListForReview {
     private String title;
     private Boolean isPass;
     private String opinion;
-    @JsonIgnore
-    private String userCode;
 }

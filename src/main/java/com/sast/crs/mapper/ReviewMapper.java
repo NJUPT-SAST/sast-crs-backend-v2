@@ -19,10 +19,10 @@ public interface ReviewMapper extends BaseMapper<Review> {
     JSONObject confirm(@Param("comId") Integer comId);
 
     IPage<ProgramListForReview> getProgramInfo(Page<ProgramListForReview> page, @Param("comId") Integer comId,
-                                               @Param("settings") List<Integer> list);
+                                               @Param("depIds") List<Integer> depIds);
 
-    IPage<ProgramListForReview> getProgramInfoNotIn(Page<ProgramListForReview> page, @Param("com_id") Integer comId,
-                                                    @Param("settings") List<Integer> list);
+    IPage<ProgramListForReview> getProgramInfoNotIn(Page<ProgramListForReview> page, @Param("comId") Integer comId,
+                                                    @Param("depIds") List<Integer> depIds);
 
     Integer getComIdByProId(Integer proId);
 
@@ -50,6 +50,4 @@ public interface ReviewMapper extends BaseMapper<Review> {
     String getTeamName(@Param("comId") Integer comId, @Param("captainId") String captainId);
 
     String getCaptainName(@Param("code") String captainId);
-
-    ProgramListForReview getProPass(@Param("comId") Integer comId, @Param("code") String code);
 }
