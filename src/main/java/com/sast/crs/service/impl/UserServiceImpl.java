@@ -10,10 +10,12 @@ import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sast.crs.constant.RedisKeyConst;
 import com.sast.crs.entity.*;
+import com.sast.crs.enums.CompetitionTypeEnum;
 import com.sast.crs.enums.ErrorEnum;
 import com.sast.crs.exception.LocalRuntimeException;
 import com.sast.crs.mapper.*;
 import com.sast.crs.model.FileCache;
+import com.sast.crs.model.TeamInfoWithCom;
 import com.sast.crs.model.WorkSchema;
 import com.sast.crs.pojo.UserResponse;
 import com.sast.crs.service.UserService;
@@ -196,55 +198,19 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public Map<String, Object> getTeamInfo(@NotNull User user, Long comId) {
-        Competition competition = getCompetition(comId);
-        Team team = getSignedTeam(user.getCode(), competition.getId());
         Map<String, Object> data = new HashMap<>();
-
+        TeamInfoWithCom teamInfoWithCom = teamMapper.selectTeamInfoWithCom(comId, user.getCode());
+        if (teamInfoWithCom == null) {
+            throw new LocalRuntimeException(ErrorEnum.HAVE_NOT_SIGNED_COM);
+        }
+        if (Objects.equals(teamInfoWithCom.getComType(), CompetitionTypeEnum.TEAM_COMPETITION)) {
+            data.put("teamName", teamInfoWithCom.getTeamName());
+        }
         // 团队成员
-        if (competition.isTeamCom())
-            data.put("teamName", team.getName());
-        List<UserResponse> users = new LinkedList<>();
-        JSONArray memberJsonArray = JSON.parseArray(team.getMember());
-        // 先写入队长
-        Department department = departmentMapper.selectById(user.getDepId());
-        users.add(new UserResponse() {{
-            setName(user.getName());
-            setCode(user.getCode());
-            setCollege(department.getName());
-            setMajor(user.getExtra() == null ? null : user.getExtra().getMajor());
-            setContact(user.getExtra() == null ? null : user.getExtra().getContact());
-        }});
-        // 再写入队员
-        Optional.ofNullable(memberJsonArray)
-                .ifPresent(array -> array.forEach(member -> {
-                    if (!((JSONObject) member).getString("code").equals(user.getCode())) {
-                        User memberUser = ((JSONObject) member).to(User.class);
-
-                        String college = null;
-                        if (memberUser.getDepId() != null) {
-                            Department memberDepartment = departmentMapper.selectById(memberUser.getDepId());
-                            college = memberDepartment.getName();
-                        }
-
-                        UserResponse memberUserRes = new UserResponse();
-                        memberUserRes.setName(memberUser.getName());
-                        memberUserRes.setCode(memberUser.getCode());
-                        memberUserRes.setCollege(college);
-                        memberUserRes.setMajor(memberUser.getExtra() == null ? null : memberUser.getExtra().getMajor());
-                        memberUserRes.setContact(memberUser.getExtra() == null ? null : memberUser.getExtra().getContact());
-                        users.add(memberUserRes);
-                    }
-                }));
-        data.put("teamMember", users);
-
+        List<UserResponse> members = teamInfoWithCom.getTeamMembersJson().toJavaList(UserResponse.class);
+        data.put("teamMember", members);
         // 指导老师
-        List<User> teachers = new LinkedList<>();
-        JSONArray teacherJsonArray = JSON.parseArray(team.getTeacher());
-        Optional.ofNullable(teacherJsonArray)
-                .ifPresent(array -> array.forEach(teacher -> {
-                    User teacherUser = ((JSONObject) teacher).to(User.class);
-                    teachers.add(teacherUser);
-                }));
+        List<User> teachers = teamInfoWithCom.getTeacherJson().toJavaList(User.class);
         data.put("teacherMember", teachers);
         return data;
     }
