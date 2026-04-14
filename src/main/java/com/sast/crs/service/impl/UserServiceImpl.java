@@ -230,6 +230,7 @@ public class UserServiceImpl implements UserService {
                 .getJSONArray("data");
         List<WorkSchema> workSchemas = new LinkedList<>();
         String workName = null;
+        Set<String> fileInputs = new LinkedHashSet<>();
         for (Object inputObj : data) {
             JSONObject input = (JSONObject) inputObj;
             String title = input.getString("input");
@@ -239,22 +240,33 @@ public class UserServiceImpl implements UserService {
             if (title.equals("作品名称") || title.equals("作品名") || title.equals("项目名称"))
                 workName = content;
 
+            if (fileUtil.isBucketURL(content)) {
+                fileInputs.add(title);
+            }
+        }
+
+        Map<String, File> fileDBMap = loadWorkFiles(competition.getId(), user.getCode(), fileInputs);
+
+        for (Object inputObj : data) {
+            JSONObject input = (JSONObject) inputObj;
+            String title = input.getString("input");
+            String content = input.getString("content");
+
             WorkSchema workSchema = new WorkSchema();
             workSchema.setInput(title);
             workSchema.setContent(content);
             workSchema.setIsFile(false);
             // 单独处理文件
             if (fileUtil.isBucketURL(content)) {
-                File fileDB = fileMapper.selectOne(new LambdaQueryWrapper<File>()
-                        .eq(File::getComId, competition.getId())
-                        .eq(File::getUserCode, user.getCode())
-                        .eq(File::getInput, title));
                 String key = RedisKeyConst.getWorkFileCacheKey(user.getCode(), title);
+                File fileDB = fileDBMap.get(title);
                 if (fileDB == null) {
                     if (!redisUtil.hasKey(key))
                         throw new LocalRuntimeException(ErrorEnum.FILE_EXPIRED_ERROR);
                     FileCache cache = JSON.parseObject((String) redisUtil.get(key), FileCache.class);
-                    fileMapper.insert(cache.toFile());
+                    File newFile = cache.toFile();
+                    fileMapper.insert(newFile);
+                    fileDBMap.put(title, newFile);
                 } else if (!fileDB.getUrl().equalsIgnoreCase(content)) {
                     if (!redisUtil.hasKey(key))
                         throw new LocalRuntimeException(ErrorEnum.FILE_EXPIRED_ERROR);
@@ -262,6 +274,7 @@ public class UserServiceImpl implements UserService {
                     FileCache cache = JSON.parseObject((String) redisUtil.get(key), FileCache.class);
                     fileDB.setUrl(cache.getUrl());
                     fileMapper.updateById(fileDB);
+                    fileDBMap.put(title, fileDB);
                 }
                 redisUtil.del(key);
                 workSchema.setIsFile(true);
@@ -456,6 +469,26 @@ public class UserServiceImpl implements UserService {
     @NotNull
     private String formatDateTime(@NotNull LocalDateTime time) {
         return time.format(DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm"));
+    }
+
+    @NotNull
+    private Map<String, File> loadWorkFiles(Long comId, String userCode, Collection<String> inputs) {
+        Map<String, File> fileMap = new HashMap<>();
+        if (inputs == null || inputs.isEmpty()) {
+            return fileMap;
+        }
+
+        List<File> files = fileMapper.selectList(new LambdaQueryWrapper<File>()
+                .eq(File::getComId, comId)
+                .eq(File::getUserCode, userCode)
+                .in(File::getInput, inputs));
+        for (File file : files) {
+            File previous = fileMap.putIfAbsent(file.getInput(), file);
+            if (previous != null) {
+                throw new LocalRuntimeException("文件记录重复，请联系管理员");
+            }
+        }
+        return fileMap;
     }
 
     @NotNull
