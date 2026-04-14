@@ -3,6 +3,7 @@ package com.sast.crs.service.impl;
 import cn.hutool.core.io.FileTypeUtil;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sast.crs.entity.*;
 import com.sast.crs.enums.ErrorEnum;
@@ -10,7 +11,6 @@ import com.sast.crs.exception.LocalRuntimeException;
 import com.sast.crs.mapper.*;
 import com.sast.crs.model.ComMangerVo;
 import com.sast.crs.model.CompetitionVO;
-import com.sast.crs.model.ProgramListForReview;
 import com.sast.crs.service.AdminService;
 import com.sast.crs.util.FileUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +20,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.*;
 
 import static com.sast.crs.enums.ErrorEnum.*;
@@ -37,7 +36,9 @@ public class AdminServiceImpl implements AdminService {
     private final DepartmentMapper departmentMapper;
     private final FileUtil fileUtil;
 
-    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper, ReviewMapper reviewMapper, TeamMapper teamMapper, JudgeMapper judgeMapper, WorkMapper workMapper, DepartmentMapper departmentMapper, FileUtil fileUtil) {
+    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper,
+                            ReviewMapper reviewMapper, TeamMapper teamMapper,
+                            WorkMapper workMapper, DepartmentMapper departmentMapper, FileUtil fileUtil) {
         this.adminMapper = adminMapper;
         this.userMapper = userMapper;
         this.fileMapper = fileMapper;
@@ -183,49 +184,10 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public Map<String, Object> getContestList(Integer pageNum, Integer pageSize) {
-        Page<Competition> competitionPage = adminMapper.selectPage(new Page<>(pageNum, pageSize), new QueryWrapper<>());
-        ArrayList<CompetitionVO> resList = new ArrayList<>();
-        for (Competition record : competitionPage.getRecords()) {
-            CompetitionVO competitionVO = new CompetitionVO();
-            competitionVO.setId(record.getId());
-            competitionVO.setName(record.getName());
-            // 比赛开始时间是报名开始时间
-            LocalDateTime beginTime = record.getRegBeginTime();
-            competitionVO.setBeginTime(beginTime);
-            // 结束时间是评审结束时间
-            LocalDateTime endTime = record.getReviewEndTime();
-            competitionVO.setEndTime(endTime);
-            competitionVO.setIntroduce(record.getIntroduce());
-            String userCode = record.getUserCode();
-            User user = userMapper.selectById(userCode);
-            Integer depId = user.getDepId();
-            Map<String, String> settings = record.getReviewSettings();
-            String reviewer;
-            if (settings.containsKey(depId.toString())) {
-                reviewer = settings.get(depId.toString());
-            } else {
-                reviewer = settings.get("0");
-            }
-            competitionVO.setReviewer(reviewer);
-            LocalDateTime time = LocalDateTime.now();
-            String status;
-            if (time.isAfter(endTime)) {
-                status = "已结束";
-            } else if (time.isBefore(beginTime)) {
-                status = "未开始";
-            } else {
-                status = "进行中";
-            }
-            competitionVO.setStatus(status);
-            Long teamCount = teamMapper.selectCount(new QueryWrapper<Team>().eq("com_id", competitionVO.getId()));
-            if (teamCount == null) teamCount = 0L;
-            competitionVO.setRegNum(teamCount);
-            Long fileCount = workMapper.selectCount(new QueryWrapper<Work>().eq("com_id", competitionVO.getId()));
-            competitionVO.setSubNum(fileCount);
-            competitionVO.setRevNum(reviewMapper.getReviewNum(competitionVO.getId()));
-            resList.add(competitionVO);
-        }
-        return getResultMap(resList, competitionPage.getTotal(), pageNum, pageSize);
+        Page<CompetitionVO> Page = new Page<>(pageNum, pageSize);
+        IPage<CompetitionVO> contestListPage = adminMapper.getContestListPage(Page);
+        List<CompetitionVO> resList = contestListPage.getRecords();
+        return getResultMap(resList, contestListPage.getTotal(), pageNum, pageSize);
     }
 
     @Override

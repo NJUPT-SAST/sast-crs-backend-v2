@@ -5,10 +5,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sast.crs.entity.Competition;
 import com.sast.crs.model.ComMangerVo;
+import com.sast.crs.model.CompetitionVO;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Repository;
-
-import java.util.List;
 
 /**
  * @Author xun
@@ -17,4 +16,5 @@ import java.util.List;
 @Repository
 public interface AdminMapper extends BaseMapper<Competition> {
     IPage<ComMangerVo> getComMangerInfo(Page<ComMangerVo> page, @Param("comId") Long comId);
+    IPage<CompetitionVO> getContestListPage(Page<CompetitionVO> page);
 }
