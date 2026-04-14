@@ -5,7 +5,6 @@ import com.alibaba.excel.util.ListUtils;
 import com.alibaba.excel.util.MapUtils;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sast.crs.constant.CommonConst;
@@ -25,11 +24,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.*;
 
 @Service
 public class ScoreServiceImpl implements ScoreService {
@@ -39,15 +34,6 @@ public class ScoreServiceImpl implements ScoreService {
 
     @Autowired
     private ReviewMapper reviewMapper;
-
-    @Autowired
-    private UserMapper userMapper;
-
-    @Autowired
-    private WorkMapper workMapper;
-
-    @Autowired
-    private DepartmentMapper departmentMapper;
 
     @Override
     public PageInfo<ComListForScore> getCompetitionList(String code, Integer pageNum) {
@@ -199,10 +185,13 @@ public class ScoreServiceImpl implements ScoreService {
         head2.add("队长姓名");
         List<String> head3 = ListUtils.newArrayList();
         head3.add("队长所在部门");
+        List<String> head4 = ListUtils.newArrayList();
+        head4.add("项目类别");
         list.add(head0);
         list.add(head1);
         list.add(head2);
         list.add(head3);
+        list.add(head4);
         // 评委不定，所以这里需要遍历设置
         for (int i = 1; i <= max; ++i) {
             List<String> judgeCode = ListUtils.newArrayList();
@@ -225,72 +214,29 @@ public class ScoreServiceImpl implements ScoreService {
      * @return 评审结果excel所需要的数据：作品ID、队长学工号、队长姓名、队长所在部门、项目类别、评委学工号、评委打分、评委评语
      */
     private Map<String, Object> dataList(Long comId) {
-        QueryWrapper<Score> scoreQueryWrapper = new QueryWrapper<>();
-        scoreQueryWrapper.eq("com_id", comId).select("judge_code", "score", "opinion", "user_code");
-        List<Score> scores = scoreMapper.selectList(scoreQueryWrapper);
-        if (scores.isEmpty()) {
+        List<ScoreExportRow> rows = scoreMapper.selectExportRows(comId);
+        if (rows.isEmpty()) {
             throw new LocalRuntimeException(ErrorEnum.SCORE_NOT_EXIST);
         }
         Map<String, Object> res = new HashMap<>();
-        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
-        QueryWrapper<Department> departmentQueryWrapper = new QueryWrapper<>();
-        QueryWrapper<Work> workQueryWrapper = new QueryWrapper<>();
-        Map<String, Integer> map = new HashMap<>();
         List<List<Object>> dataList = ListUtils.newArrayList();
-        int max = 1;
-        for (Score score : scores) {
+        Map<String, List<ScoreExportRow>> groupedRows = new LinkedHashMap<>();
+        for (ScoreExportRow row : rows) {
+            groupedRows.computeIfAbsent(row.getLeaderCode(), key -> new ArrayList<>()).add(row);
+        }
+        int max = groupedRows.values().stream().mapToInt(List::size).max().orElse(1);
+        for (List<ScoreExportRow> group : groupedRows.values()) {
+            ScoreExportRow first = group.get(0);
             List<Object> tempData = ListUtils.newArrayList();
-            // 队长学号
-            String leaderCode = score.getUserCode();
-            // 通过存取队长学号判断评委数量
-            map.put(leaderCode, map.getOrDefault(leaderCode, 0) + 1);
-            // 如果队长学号的数量大于1，说明这个作品有多个评委评分，直接跳过
-            if (map.get(leaderCode) > 1) {
-                max = Math.max(map.get(leaderCode), max);
-                continue;
-            }
-            // 查询作品ID
-            workQueryWrapper.eq("com_id", comId).eq("user_code", leaderCode);
-            Work work = workMapper.selectOne(workQueryWrapper);
-            workQueryWrapper.clear();
-            // 查询队长名字跟部门
-            userQueryWrapper.eq("code", leaderCode).select("name", "dep_id");
-            User leader = userMapper.selectOne(userQueryWrapper);
-            userQueryWrapper.clear();
-            String leaderName = leader.getName();
-            departmentQueryWrapper.eq("id", leader.getDepId());
-            String depName = departmentMapper.selectOne(departmentQueryWrapper).getName();
-            departmentQueryWrapper.clear();
-            // 将数据存到当前行
-            tempData.add(work.getId());
-            tempData.add(leaderCode);
-            tempData.add(leaderName);
-            tempData.add(depName);
-            tempData.add(getWorkType(work));
-            // 查询这个作品的所有评委
-            QueryWrapper<Score> judgeQueryWrapper = new QueryWrapper<>();
-            judgeQueryWrapper.eq("com_id", comId).eq("user_code", leaderCode);
-            List<Score> judges = scoreMapper.selectList(judgeQueryWrapper);
-            String judgeCode;
-            Integer resScore;
-            String opinion;
-            // 如果评委数大于1需要额外处理
-            if (judges.size() > 1) {
-                for (Score judge : judges) {
-                    judgeCode = judge.getJudgeCode();
-                    resScore = judge.getScore();
-                    opinion = judge.getOpinion();
-                    tempData.add(judgeCode);
-                    tempData.add(resScore);
-                    tempData.add(opinion);
-                }
-            } else {
-                judgeCode = score.getJudgeCode();
-                resScore = score.getScore();
-                opinion = score.getOpinion();
-                tempData.add(judgeCode);
-                tempData.add(resScore);
-                tempData.add(opinion);
+            tempData.add(first.getId());
+            tempData.add(first.getLeaderCode());
+            tempData.add(first.getLeaderName());
+            tempData.add(first.getDepName());
+            tempData.add(getWorkType(first.getSchemaContent()));
+            for (ScoreExportRow judge : group) {
+                tempData.add(judge.getJudgeCode());
+                tempData.add(judge.getScore());
+                tempData.add(judge.getOpinion());
             }
             dataList.add(tempData);
         }
@@ -301,9 +247,9 @@ public class ScoreServiceImpl implements ScoreService {
 
     private final JsonMapper objectMapper = JsonMapper.builder().build();
 
-    private String getWorkType(Work work) {
+    private String getWorkType(String schemaContent) {
         try {
-            JsonNode node = objectMapper.readTree(work.getSchemaContent());
+            JsonNode node = objectMapper.readTree(schemaContent);
             for (JsonNode sub : node) {
                 if (CommonConst.WORK_TYPE.equals(sub.get("input").asText())) {
                     return sub.get("content").asText();

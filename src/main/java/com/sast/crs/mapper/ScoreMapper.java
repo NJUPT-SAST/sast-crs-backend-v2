@@ -6,9 +6,16 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sast.crs.entity.Score;
 import com.sast.crs.model.ComListForScore;
 import com.sast.crs.model.ProgramListForScore;
+import com.sast.crs.model.ScoreExportRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
+/**
+ * @author Jun
+ * @date 2022/07/23
+ */
 @Mapper
 public interface ScoreMapper extends BaseMapper<Score> {
     IPage<ComListForScore> getComInfo(Page<ComListForScore> page, @Param("code") String code);
@@ -33,4 +40,6 @@ public interface ScoreMapper extends BaseMapper<Score> {
     boolean isExistence(@Param("comId") Integer comId, @Param("userCode") String userCode,@Param("teacher") String teacher);
     Integer updateScore(@Param("comId") Integer comId,@Param("teacher") String teacher,@Param("student") String student,
                                @Param("score") Integer score, @Param("opinion") String opinion) ;
+
+    List<ScoreExportRow> selectExportRows(@Param("comId") Long comId);
 }
