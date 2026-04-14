@@ -21,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.sast.crs.enums.ErrorEnum.*;
 
@@ -61,23 +62,9 @@ public class AdminServiceImpl implements AdminService {
         }
 
         // 校验审批关系数据是否正确
-        // 主要是判断部门跟用户是否存在
         Map<String, String> settings = competition.getReviewSettings();
-        if (settings == null) {
-            throw new LocalRuntimeException(REVIEW_SETTINGS_ERROR);
-        }
-        settings.forEach((s, o) -> {
-            boolean userRes = userIsExist(o);
-            if (!"0".equals(s)) {
-                boolean depRes = depIsExist(Integer.valueOf(s));
-                if (!depRes) {
-                    throw new LocalRuntimeException(ErrorEnum.DEP_NOT_EXIST);
-                }
-            }
-            if (!userRes) {
-                throw new LocalRuntimeException(ErrorEnum.USER_NOT_EXIST);
-            }
-        });
+        validateReviewSettings(settings);
+
         // 判断活动负责人是否存在
         if (!userIsExist(competition.getUserCode())) {
             throw new LocalRuntimeException(USER_NOT_EXIST);
@@ -120,23 +107,9 @@ public class AdminServiceImpl implements AdminService {
         }
 
         // 校验审批关系数据是否正确
-        // 主要是判断部门跟用户是否存在
         Map<String, String> settings = competition.getReviewSettings();
-        if (settings == null) {
-            throw new LocalRuntimeException(REVIEW_SETTINGS_ERROR);
-        }
-        settings.forEach((s, o) -> {
-            boolean userRes = userIsExist(o);
-            if (!"0".equals(s)) {
-                boolean depRes = depIsExist(Integer.valueOf(s));
-                if (!depRes) {
-                    throw new LocalRuntimeException(ErrorEnum.DEP_NOT_EXIST);
-                }
-            }
-            if (!userRes) {
-                throw new LocalRuntimeException(ErrorEnum.USER_NOT_EXIST);
-            }
-        });
+        validateReviewSettings(settings);
+
         // 判断活动负责人是否存在
         if (!userIsExist(competition.getUserCode())) {
             throw new LocalRuntimeException(USER_NOT_EXIST);
@@ -266,18 +239,6 @@ public class AdminServiceImpl implements AdminService {
     }
 
     /**
-     * 判断是否存在这个部门
-     *
-     * @param id 部门 id
-     * @return 判断结果
-     */
-    public boolean depIsExist(Integer id) {
-        QueryWrapper<Department> wrapper = new QueryWrapper<>();
-        wrapper.eq("id", id);
-        return departmentMapper.exists(wrapper);
-    }
-
-    /**
      * 判断是否存在这个用户
      *
      * @param userCode 用户学号
@@ -321,6 +282,56 @@ public class AdminServiceImpl implements AdminService {
             case "jpg", "jpeg", "png" -> true;
             default -> false;
         };
+    }
+
+    private void validateReviewSettings(Map<String, String> settings) {
+        if (settings == null || settings.isEmpty()) {
+            throw new LocalRuntimeException(REVIEW_SETTINGS_ERROR);
+        }
+
+        // 1) 收集所有审核人账号
+        Set<String> reviewerCodes = settings.values().stream()
+                .filter(Objects::nonNull)
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toSet());
+
+        if (reviewerCodes.isEmpty()) {
+            throw new LocalRuntimeException(USER_NOT_EXIST);
+        }
+
+        // 2) 收集所有非0部门ID
+        Set<Integer> depIds = new HashSet<>();
+        for (String key : settings.keySet()) {
+            if (!"0".equals(key)) {
+                try {
+                    depIds.add(Integer.valueOf(key));
+                } catch (NumberFormatException e) {
+                    throw new LocalRuntimeException(ErrorEnum.DEP_NOT_EXIST);
+                }
+            }
+        }
+
+        // 3) 批量查用户
+        List<User> users = userMapper.selectList(
+                new QueryWrapper<User>().select("code").in("code", reviewerCodes)
+        );
+        Set<String> existingCodes = users.stream().map(User::getCode).collect(Collectors.toSet());
+
+        if (existingCodes.size() != reviewerCodes.size()) {
+            throw new LocalRuntimeException(ErrorEnum.USER_NOT_EXIST);
+        }
+
+        // 4) 批量查部门（仅非0）
+        if (!depIds.isEmpty()) {
+            List<Department> deps = departmentMapper.selectList(
+                    new QueryWrapper<Department>().select("id").in("id", depIds)
+            );
+            Set<Integer> existingDepIds = deps.stream().map(Department::getId).collect(Collectors.toSet());
+
+            if (existingDepIds.size() != depIds.size()) {
+                throw new LocalRuntimeException(ErrorEnum.DEP_NOT_EXIST);
+            }
+        }
     }
 
 }
