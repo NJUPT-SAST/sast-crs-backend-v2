@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sast.crs.mapper.ScoreMapper">
+
+    <!--获取评分比赛列表-->
+    <resultMap id="comInfoMap" type="com.sast.crs.model.ComListForScore">
+        <id column="com_id" property="id"/>
+        <result column="judge_code" property="code"/>
+        <result property="title" column="title"/>
+        <result property="totalNum" column="total_num"/>
+        <result property="completedNum" column="completed_num"/>
+        <result property="startDate" column="start_date"/>
+        <result property="endDate" column="end_date"/>
+    </resultMap>
+    <update id="updateScore">
+        UPDATE score
+        SET score=#{score},
+            opinion=#{opinion}
+        WHERE com_id = #{comId}
+          AND judge_code = #{teacher}
+          AND user_code = #{student}
+    </update>
+    <select id="getComInfo" parameterType="string" resultMap="comInfoMap">
+        SELECT competition.name                                                                         AS title,
+               judge.judge_code,
+               judge.com_id,
+               competition.review_begin_time                                                            AS start_date,
+               competition.review_end_time                                                              AS end_date,
+               (SELECT COUNT(*) FROM judge AS j WHERE j.com_id = judge.com_id AND judge_code = #{code}) AS total_num,
+               (SELECT COUNT(*) FROM score WHERE com_id = judge.com_id AND judge_code = #{code})        AS completed_num
+        FROM judge
+                 JOIN competition ON competition.id = judge.com_id
+        WHERE judge_code = #{code}
+        GROUP BY com_id
+    </select>
+
+    <!--获取评分作品列表-->
+    <resultMap id="proListMap" type="com.sast.crs.model.ProgramListForScore">
+        <id column="id" property="id"/>
+        <result column="work_name" property="title"/>
+    </resultMap>
+    <select id="getProList" resultMap="com.sast.crs.mapper.ScoreMapper.proListMap">
+        SELECT id, work_name
+        FROM work
+        WHERE com_id = #{comId}
+          AND user_code IN (SELECT user_code FROM judge WHERE com_id = #{comId} AND judge_code = #{code})
+    </select>
+    <select id="getScore" resultType="java.lang.Integer">
+        SELECT score
+        FROM score
+        WHERE com_id = (SELECT com_id FROM work WHERE id = #{id})
+          AND judge_code = #{code}
+          AND user_code = (SELECT user_code FROM work WHERE id = #{id})
+    </select>
+    <select id="getOpinion" resultType="java.lang.String">
+        SELECT opinion
+        FROM score
+        WHERE com_id = (SELECT com_id FROM work WHERE id = #{id})
+          AND judge_code = #{code}
+          AND user_code = (SELECT user_code FROM work WHERE id = #{id})
+    </select>
+
+    <!--上传评分信息-->
+    <insert id="upload">
+        INSERT INTO score (judge_code, user_code, com_id, score, opinion)
+        VALUES (#{jCode}, #{uCode}, #{comId}, #{score}, #{opinion})
+    </insert>
+
+    <!--通过评审id获取用户code-->
+    <select id="getUserCode" resultType="java.lang.String" parameterType="int">
+        SELECT user_code
+        FROM work
+        WHERE id = #{proId}
+    </select>
+
+    <!--通过比赛id获取评审id-->
+    <select id="getIndexId" resultType="java.lang.Integer">
+        SELECT id
+        FROM judge
+        WHERE com_id = #{id}
+          AND judge_code = #{code}
+          AND user_code = #{user}
+    </select>
+
+    <!--获取需打分总数-->
+    <select id="getJudgeCount" resultType="java.lang.Integer" parameterType="string">
+        SELECT COUNT(*)
+        FROM judge
+        WHERE judge_code = #{code}
+    </select>
+
+    <!--获取完成打分数目-->
+    <select id="getComCount" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM score
+        WHERE judge_code = #{code}
+    </select>
+
+    <!--获取数目-->
+    <select id="getJCount" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM judge
+        WHERE user_code = (SELECT user_code FROM work WHERE id = #{id})
+          AND judge_code = #{code}
+    </select>
+
+    <!--获取某一作品待评分总数-->
+    <select id="getTotal" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM judge
+        WHERE judge_code = #{code}
+          AND com_id = #{id}
+    </select>
+
+    <!--获取评分信息-->
+    <select id="getScoreInfo" resultType="java.lang.Integer">
+        SELECT score
+        FROM score
+        WHERE com_id = #{comId}
+          AND user_code = #{user}
+          AND judge_code = #{judge}
+    </select>
+    <select id="getOpinionInfo" resultType="java.lang.String">
+        SELECT opinion
+        FROM score
+        WHERE com_id = #{comId}
+          AND user_code = #{user}
+          AND judge_code = #{judge}
+    </select>
+    <select id="getComIdByProId" resultType="java.lang.Integer">
+        SELECT com_id
+        FROM work
+        WHERE id = #{proId}
+    </select>
+
+    <select id="getTotalDone" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM score
+        WHERE judge_code = #{code}
+          AND com_id = #{id}
+    </select>
+
+    <select id="isExistence" resultType="java.lang.Boolean">
+        SELECT COUNT(*)
+        FROM score
+        WHERE user_code = #{userCode}
+          AND com_id = #{comId}
+          AND judge_code = #{teacher}
+    </select>
+
+</mapper>

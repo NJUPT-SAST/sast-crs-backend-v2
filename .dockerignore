@@ -1,0 +1,11 @@
+.git
+.gitignore
+.idea
+.vscode
+target
+log
+Dockerfile
+docker-compose.yml
+.env
+# 个人开发配置（含敏感信息，禁止打进镜像）
+src/main/resources/application-local*.yml

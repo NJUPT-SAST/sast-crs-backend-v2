@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sast.crs.mapper.ReviewMapper">
+
+    <!--获取审核比赛列表-->
+    <resultMap id="comInfoMap" type="com.sast.crs.model.ComListForReview">
+        <id column="id" property="id"/>
+        <result column="review_begin_time" property="startDate"/>
+        <result column="review_end_time" property="endDate"/>
+        <result column="name" property="title"/>
+        <result column="completed_num" property="completedNum"/>
+        <result column="total_num" property="totalNum"/>
+    </resultMap>
+    <select id="getComInfo" resultMap="comInfoMap">
+        SELECT competition.id,
+               name,
+               review_begin_time,
+               review_end_time,
+               IF(#{code} = JSON_OBJECT(review_settings, '$.0'), (
+                   (SELECT COUNT(*)
+                    FROM review
+                    WHERE review.accept IS NOT NULL
+                      AND review.com_id = competition.id
+                      AND review.user_code NOT IN
+                          (SELECT user.code FROM user WHERE JSON_CONTAINS(JSON_KEYS(review_settings), CONCAT('$.',user.dep_id))))),
+                  (SELECT COUNT(*)
+                   FROM review
+                   WHERE review.accept IS NOT NULL
+                     AND review.com_id = competition.id
+                     AND review.user_code IN
+                         (SELECT user.code FROM user WHERE user.dep_id = #{dep_id}))) AS 'completed_num',
+               IF(#{code} = JSON_OBJECT(review_settings, '$.0'),
+                  (SELECT COUNT(*)
+                   FROM review
+                   WHERE review.com_id = competition.id
+                     AND review.user_code NOT IN (SELECT user.code
+                                                  FROM user
+                                                  WHERE JSON_CONTAINS_PATH(review_settings,'one', CONCAT('$.',user.dep_id)))),
+                  (SELECT COUNT(*)
+                   FROM review
+                   WHERE review.com_id = competition.id
+                     AND review.user_code IN
+                         (SELECT user.code FROM user WHERE user.dep_id = #{dep_id}))) AS 'total_num'
+        FROM competition
+        WHERE is_review = 1
+          AND review_settings LIKE '%' #{code} '%'
+        ORDER BY review_begin_time DESC
+    </select>
+
+    <!--获取比赛审批信息-->
+    <select id="confirm" resultType="com.alibaba.fastjson.JSONObject">
+        SELECT review_settings
+        FROM competition
+        WHERE id = #{comId}
+    </select>
+
+    <!--获取比赛作品列表-->
+    <resultMap id="proInfoMap" type="com.sast.crs.model.ProgramListForReview">
+        <id column="id" property="id"/>
+        <result column="user_code" property="userCode"/>
+        <result column="work_name" property="title"/>
+    </resultMap>
+    <select id="getProgramInfo" resultMap="proInfoMap">
+        select id,work_name,user_code from work where com_id = #{comId}
+        AND (select dep_id from user where code = work.user_code)
+        <foreach collection="settings" item="setting" open="IN(" close=")" separator="," index="index">
+            #{setting}
+        </foreach>
+    </select>
+    <select id="getProgramInfoNotIn" resultMap="proInfoMap">
+        select id,work_name,user_code from work where com_id = #{com_id}
+        AND (select dep_id from user where code = work.user_code)
+        <foreach collection="settings" item="setting" open="NOT IN(" close=")" separator="," index="index">
+            #{setting}
+        </foreach>
+    </select>
+    <resultMap id="pass" type="com.sast.crs.model.ProgramListForReview">
+        <result column="accept" property="isPass"/>
+        <result column="opinion" property="opinion"/>
+    </resultMap>
+    <select id="getProPass" resultMap="pass">
+        SELECT accept, opinion
+        FROM review
+        WHERE com_id = #{comId}
+          AND user_code = #{code}
+    </select>
+
+    <!--通过项目id获取比赛id-->
+    <select id="getComIdByProId" resultType="java.lang.Integer" parameterType="int">
+        SELECT com_id
+        FROM work
+        WHERE id = #{ProId}
+    </select>
+
+    <!--获取附件-->
+    <select id="getAccessories" resultType="string">
+        SELECT url
+        FROM file
+        WHERE com_id = #{comId}
+          AND user_code = #{userCode}
+    </select>
+
+    <!--通过比赛id获取比赛类型-->
+    <select id="getTypeByComId" resultType="java.lang.Integer" parameterType="int">
+        SELECT type
+        FROM competition
+        WHERE id = #{comId}
+    </select>
+
+    <!--获取团队成员信息-->
+    <select id="getJMember" resultType="java.lang.String">
+        SELECT member
+        FROM team
+        WHERE com_id = #{comId}
+          AND captain = #{captainId}
+    </select>
+
+    <!--通过项目id获取队长学号-->
+    <select id="getCaptainIdByProId" resultType="java.lang.String" parameterType="int">
+        SELECT user_code
+        FROM work
+        WHERE id = #{proId}
+    </select>
+
+    <!--更新审批状态-->
+    <update id="updateReview">
+        UPDATE review
+        SET review_code = #{code},
+            accept      = #{accept},
+            opinion     = #{opinion}
+        WHERE com_id = (SELECT com_id FROM work WHERE id = #{id})
+          AND user_code = (SELECT user_code FROM work WHERE id = #{id})
+    </update>
+
+    <!--获取需审批总数-->
+    <select id="getReviewCount" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM review
+    </select>
+
+    <!--获取完成审批数-->
+    <select id="getComCount" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM review
+        WHERE accept IS NOT NULL
+    </select>
+
+
+    <!--获取某一作品审核总数-->
+    <select id="getTotal" resultType="java.lang.Integer">
+        select COUNT(*) from review where
+        (select dep_id from user where code = review.user_code)
+        <foreach collection="settings" item="setting" open="IN(" close=")" separator="," index="index">
+            #{setting}
+        </foreach>
+        AND com_id = #{comId}
+        AND accept is null
+    </select>
+
+    <select id="getTotalNotIn" resultType="java.lang.Integer">
+        select COUNT(*) from review
+        where (select dep_id from user where code = review.user_code)
+        <foreach collection="settings" item="setting" open="NOT IN(" close=")" separator="," index="index">
+            #{setting}
+        </foreach>
+        and com_id = #{comId}
+        AND accept is null
+    </select>
+
+
+    <!--获取已审批完毕数-->
+    <select id="getReviewNum" resultType="long">
+        SELECT COUNT(*)
+        FROM `review`
+        WHERE `review_code` != ''
+          AND `com_id` = #{comId}
+    </select>
+
+    <!--获取部门id-->
+    <select id="getDepId" resultType="java.lang.Integer">
+        SELECT id
+        FROM department
+        WHERE name = #{depName}
+    </select>
+
+    <!--获取部门名称-->
+    <select id="getDepName" resultType="java.lang.String">
+        SELECT name
+        FROM department
+        WHERE id = #{id}
+    </select>
+
+    <!--获取表单json-->
+    <select id="getContents" resultType="java.lang.String">
+        SELECT schema_content
+        FROM work
+        WHERE com_id = #{comId}
+          AND user_code = #{userCode}
+    </select>
+    <select id="getTeamName" resultType="java.lang.String">
+        SELECT name
+        FROM team
+        WHERE com_id = #{comId}
+          AND captain = #{captainId}
+    </select>
+    <select id="getCaptainName" resultType="java.lang.String">
+        SELECT name
+        FROM user
+        WHERE code = #{code}
+    </select>
+</mapper>

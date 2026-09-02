@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 注意：Spring Boot 4 已不支持 <springProfile> 扩展，此处为全环境统一的日志配置 -->
+<configuration scan="false" scanPeriod="600 seconds">
+    <!-- 设置上下文的名称 -->
+    <contextName>crs-log</contextName>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- 默认日志路径（dev 环境同样写入本地 log/ 目录，已被 .gitignore 忽略） -->
+    <property name="LOG_PATH" value="log"/>
+    <!-- 无色日志输出格式 -->
+    <property name="DEFAULT_PATTERN_NONE_COLOR"
+              value="%date{yyyy-MM-dd HH:mm:ss.SSS}  %-5level --- [%15thread] %40.40logger : %message %n%exception{full}"/>
+
+    <!-- 控制台输出 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 文件日志记录（按日期滚动） -->
+    <appender name="LOG_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <encoder>
+            <pattern>${DEFAULT_PATTERN_NONE_COLOR}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- 每天日志归档路径以及格式 -->
+            <fileNamePattern>${LOG_PATH}/crs-log.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <!-- 日志文档保留天数 -->
+            <maxHistory>7</maxHistory>
+            <!-- 单个文件的最大大小 -->
+            <maxFileSize>50MB</maxFileSize>
+            <!-- 日志文件的上限大小 -->
+            <totalSizeCap>200MB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- 异常日志单独记录 -->
+    <appender name="EXCEPTION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- 只输出ERROR级别日志 -->
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>${DEFAULT_PATTERN_NONE_COLOR}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/crs-exception.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxHistory>14</maxHistory>
+            <maxFileSize>100MB</maxFileSize>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOG_FILE"/>
+        <appender-ref ref="EXCEPTION_FILE"/>
+    </root>
+
+</configuration>

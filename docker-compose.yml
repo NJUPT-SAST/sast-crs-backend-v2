@@ -1,0 +1,77 @@
+# 本地开发 / 生产部署统一编排（敏感配置写入 .env，该文件不入库）
+#
+# 使用：
+#   docker compose up --build -d     # 构建并启动 mysql + redis + app（自动建库和种子数据）
+#   docker compose logs -f app       # 查看应用日志
+#   docker compose down              # 停止（保留数据库卷）
+#   docker compose down -v           # 停止并删除全部数据（含数据库卷）
+#
+# 开发便利：MySQL 映射到宿主机 3307、Redis 映射到 6380，可用图形客户端直连；
+# 生产环境可删除 mysql/redis 的 ports 段（仅保留 app 对外）。
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: crs
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 首次创建数据卷时自动建库建表和演示种子数据
+      - ./src/main/resources/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./src/main/resources/data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    environment:
+      TZ: Asia/Shanghai
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      DB_URL: "jdbc:mysql://mysql:3306/crs?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowMultiQueries=true&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
+      DB_USERNAME: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SERVER_PORT: 1080
+      # 容器内必须监听 0.0.0.0，否则宿主机端口转发无法到达
+      SERVER_ADDRESS: 0.0.0.0
+      # 连接池（v1 的 200/100 超过 MySQL 默认 max_connections=151，按实际规模收敛）
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: 5
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: 20
+      # 文件上传/下载相关（使用到再填）
+      COS_SECRET_ID: ${COS_SECRET_ID:-}
+      COS_SECRET_KEY: ${COS_SECRET_KEY:-}
+      COS_BUCKET_NAME: ${COS_BUCKET_NAME:-}
+      COS_REGION: ${COS_REGION:-}
+      COS_PUBLIC_FOLDER: ${COS_PUBLIC_FOLDER:-crs-public}
+      COS_PRIVATE_FOLDER: ${COS_PRIVATE_FOLDER:-crs-private}
+    ports:
+      - "1080:1080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
