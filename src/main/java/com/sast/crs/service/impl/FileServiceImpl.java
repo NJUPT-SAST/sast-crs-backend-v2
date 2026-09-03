@@ -109,6 +109,9 @@ public class FileServiceImpl implements FileService {
         List<String> workName = ListUtils.newArrayList();
         workName.add("作品名称");
         list.add(workName);
+        List<String> workType = ListUtils.newArrayList();
+        workType.add("项目类别");
+        list.add(workType);
         return list;
     }
 
