@@ -58,7 +58,10 @@ public class FileServiceImpl implements FileService {
             response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
             QueryWrapper<Competition> competitionQueryWrapper = new QueryWrapper<>();
             competitionQueryWrapper.eq("id", comId);
-            Competition competition = adminMapper.selectOne(competitionQueryWrapper);//todo
+            Competition competition = adminMapper.selectOne(competitionQueryWrapper);
+            if (competition == null) {
+                throw new LocalRuntimeException(ErrorEnum.CONTEST_NOT_EXIST);
+            }
             // 比赛最大人数，用于生成 excel 分配队员列数
             Integer maxTeamMembers = competition.getMaxTeamMembers();
             // 获取excel数据
