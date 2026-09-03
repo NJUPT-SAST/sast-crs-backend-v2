@@ -32,13 +32,14 @@ SOURCE src/main/resources/data.sql;    -- 可选：院系数据与演示种子�
 
 ### 配置
 
-复制本地配置模板并填入自己的数据库/Redis 信息：
+复制 `.env` 模板并填入自己的信息（**直跑与 docker compose 两种启动方式共用这一份配置**，`.env` 已加入 .gitignore）：
 
 ```bash
-cp src/main/resources/application-local.example.yml src/main/resources/application-local.yml
+cp -n .env.example .env
+vim .env
 ```
 
-以环境变量提供敏感配置（模板中均有默认值或占位符）：
+`.env` 中的变量（均有内置默认值，按需覆盖）：
 
 | 环境变量 | 说明 |
 | --- | --- |

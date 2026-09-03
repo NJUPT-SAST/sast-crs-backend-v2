@@ -40,5 +40,3 @@ build/
 # 个人开发配置（含敏感信息，勿提交）
 application-local*.yml
 application-hunger*.yml
-# 但保留公开的本地配置模板
-!application-local.example.yml

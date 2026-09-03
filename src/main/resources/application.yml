@@ -3,6 +3,9 @@
 spring:
   application:
     name: CommonReviewSystem
+  config:
+    # 本地直跑时也读取 .env（与 docker compose 共用同一份配置；文件不存在则忽略）
+    import: optional:file:./.env[.properties]
   servlet:
     multipart:
       max-file-size: 500MB
@@ -22,6 +25,8 @@ spring:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
 
 server:
   port: ${SERVER_PORT:1080}
@@ -42,6 +47,11 @@ jwt:
 
 file:
   COS:
+    secretId: ${COS_SECRET_ID:}
+    secretKey: ${COS_SECRET_KEY:}
+    bucketName: ${COS_BUCKET_NAME:}
     region: ${COS_REGION:ap-shanghai}
+    publicFolder: ${COS_PUBLIC_FOLDER:crs-public}
+    privateFolder: ${COS_PRIVATE_FOLDER:crs-private}
     uploadExpiredTime: 15
     downloadExpiredTime: 15
