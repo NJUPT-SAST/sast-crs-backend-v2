@@ -37,13 +37,26 @@
     <!--获取评分作品列表-->
     <resultMap id="proListMap" type="com.sast.crs.model.ProgramListForScore">
         <id column="id" property="id"/>
-        <result column="work_name" property="title"/>
+        <result column="title" property="title"/>
+        <result column="score" property="score"/>
+        <result column="opinion" property="opinion"/>
     </resultMap>
     <select id="getProList" resultMap="com.sast.crs.mapper.ScoreMapper.proListMap">
-        SELECT id, work_name
-        FROM work
-        WHERE com_id = #{comId}
-          AND user_code IN (SELECT user_code FROM judge WHERE com_id = #{comId} AND judge_code = #{code})
+        SELECT w.id,
+               w.work_name AS title,
+               s.score     AS score,
+               s.opinion   AS opinion
+        FROM work w
+                 LEFT JOIN score s
+                           ON s.com_id = w.com_id
+                               AND s.user_code = w.user_code
+                               AND s.judge_code = #{code}
+        WHERE w.com_id = #{comId}
+          AND w.user_code IN (SELECT user_code
+                              FROM judge
+                              WHERE com_id = #{comId}
+                                AND judge_code = #{code})
+        ORDER BY w.id DESC
     </select>
     <select id="getScore" resultType="java.lang.Integer">
         SELECT score
@@ -131,6 +144,39 @@
         SELECT com_id
         FROM work
         WHERE id = #{proId}
+    </select>
+
+    <!--一次性查询评分导出行数据-->
+    <resultMap id="scoreExportRowMap" type="com.sast.crs.model.ScoreExportRow">
+        <id column="work_id" property="id"/>
+        <result column="leader_code" property="leaderCode"/>
+        <result column="leader_name" property="leaderName"/>
+        <result column="dep_name" property="depName"/>
+        <result column="schema_content" property="schemaContent"/>
+        <result column="judge_code" property="judgeCode"/>
+        <result column="score" property="score"/>
+        <result column="opinion" property="opinion"/>
+    </resultMap>
+
+    <select id="selectExportRows" resultMap="scoreExportRowMap">
+        SELECT w.id           AS work_id,
+               s.user_code    AS leader_code,
+               u.name         AS leader_name,
+               d.name         AS dep_name,
+               w.schema_content,
+               s.judge_code,
+               s.score,
+               s.opinion
+        FROM score s
+                 JOIN work w
+                      ON w.com_id = s.com_id
+                          AND w.user_code = s.user_code
+                 JOIN user u
+                      ON u.code = s.user_code
+                 LEFT JOIN department d
+                           ON d.id = u.dep_id
+        WHERE s.com_id = #{comId}
+        ORDER BY w.id DESC, s.user_code, s.judge_code
     </select>
 
     <select id="getTotalDone" resultType="java.lang.Integer">

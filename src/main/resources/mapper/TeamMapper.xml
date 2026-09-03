@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sast.crs.mapper.TeamMapper">
+    <resultMap id="TeamInfoWithComMap" type="com.sast.crs.model.TeamInfoWithCom">
+        <result column="com_name" property="comName"/>
+        <result column="com_type" property="comType"/>
+        <result column="team_name" property="teamName"/>
+        <result column="teachers_json" property="teacherJson" typeHandler="com.baomidou.mybatisplus.extension.handlers.FastjsonTypeHandler"/>
+        <result column="team_members_json" property="teamMembersJson" typeHandler="com.baomidou.mybatisplus.extension.handlers.FastjsonTypeHandler"/>
+    </resultMap>
+
+    <select id="selectTeamInfoWithCom" resultMap="TeamInfoWithComMap">
+        SELECT
+            c.name                                AS com_name,
+            c.type                                AS com_type,
+            t.name                                AS team_name,
+            IFNULL(t.teacher, '[]')               AS teachers_json,
+            JSON_ARRAYAGG(
+                    JSON_OBJECT(
+                            'code', x.code,
+                            'name', x.name,
+                            'college', IFNULL(d.name, ''),
+                            'major', x.major,
+                            'contact', x.contact
+                    )
+            )                                     AS team_members_json
+        FROM team t
+                 JOIN competition c
+                      ON c.id = t.com_id
+                 JOIN (
+            -- 队长
+            SELECT
+                t1.id                                            AS team_id,
+                u.code                                           AS code,
+                u.name                                           AS name,
+                u.dep_id                                         AS dep_id,
+                JSON_UNQUOTE(JSON_EXTRACT(u.extra, '$.major'))   AS major,
+                JSON_UNQUOTE(JSON_EXTRACT(u.extra, '$.contact')) AS contact,
+                1                                                AS is_captain
+            FROM team t1
+                     JOIN user u ON u.code = t1.captain
+            WHERE t1.com_id = #{comId}
+              AND t1.captain = #{captainCode}
+
+            UNION ALL
+
+            -- 队员（team.member JSON 展开）
+            SELECT
+                t2.id      AS team_id,
+                jt.code    AS code,
+                jt.name    AS name,
+                jt.dep_id  AS dep_id,
+                jt.major   AS major,
+                jt.contact AS contact,
+                0          AS is_captain
+            FROM team t2
+                     JOIN JSON_TABLE(
+                    IFNULL(t2.member, '[]'),
+                    '$[*]' COLUMNS (
+                        code    VARCHAR(64)  PATH '$.code',
+                        name    VARCHAR(255) PATH '$.name',
+                        dep_id  INT          PATH '$.depId',
+                        major   VARCHAR(255) PATH '$.extra.major',
+                        contact VARCHAR(255) PATH '$.extra.contact'
+                        )
+                          ) jt
+            WHERE t2.com_id = #{comId}
+              AND t2.captain = #{captainCode}
+        ) x
+                      ON x.team_id = t.id
+                 LEFT JOIN department d
+                           ON d.id = x.dep_id
+        WHERE t.com_id = #{comId}
+          AND t.captain = #{captainCode}
+        GROUP BY
+            c.id, c.name, c.type, c.min_team_members, c.max_team_members,
+            t.name, t.teacher;
+    </select>
+</mapper>

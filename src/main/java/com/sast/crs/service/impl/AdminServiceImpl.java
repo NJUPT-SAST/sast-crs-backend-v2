@@ -3,6 +3,7 @@ package com.sast.crs.service.impl;
 import cn.hutool.core.io.FileTypeUtil;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sast.crs.entity.*;
 import com.sast.crs.enums.ErrorEnum;
@@ -19,8 +20,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.sast.crs.enums.ErrorEnum.*;
 
@@ -32,18 +33,16 @@ public class AdminServiceImpl implements AdminService {
     private final FileMapper fileMapper;
     private final ReviewMapper reviewMapper;
     private final TeamMapper teamMapper;
-    private final JudgeMapper judgeMapper;
     private final WorkMapper workMapper;
     private final DepartmentMapper departmentMapper;
     private final FileUtil fileUtil;
 
-    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper, ReviewMapper reviewMapper, TeamMapper teamMapper, JudgeMapper judgeMapper, WorkMapper workMapper, DepartmentMapper departmentMapper, FileUtil fileUtil) {
+    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper, ReviewMapper reviewMapper, TeamMapper teamMapper, WorkMapper workMapper, DepartmentMapper departmentMapper, FileUtil fileUtil) {
         this.adminMapper = adminMapper;
         this.userMapper = userMapper;
         this.fileMapper = fileMapper;
         this.reviewMapper = reviewMapper;
         this.teamMapper = teamMapper;
-        this.judgeMapper = judgeMapper;
         this.workMapper = workMapper;
         this.departmentMapper = departmentMapper;
         this.fileUtil = fileUtil;
@@ -61,23 +60,9 @@ public class AdminServiceImpl implements AdminService {
         }
 
         // 校验审批关系数据是否正确
-        // 主要是判断部门跟用户是否存在
         Map<String, String> settings = competition.getReviewSettings();
-        if (settings == null) {
-            throw new LocalRuntimeException(REVIEW_SETTINGS_ERROR);
-        }
-        settings.forEach((s, o) -> {
-            boolean userRes = userIsExist(o);
-            if (!"0".equals(s)) {
-                boolean depRes = depIsExist(Integer.valueOf(s));
-                if (!depRes) {
-                    throw new LocalRuntimeException(ErrorEnum.DEP_NOT_EXIST);
-                }
-            }
-            if (!userRes) {
-                throw new LocalRuntimeException(ErrorEnum.USER_NOT_EXIST);
-            }
-        });
+        validateReviewSettings(settings);
+
         // 判断活动负责人是否存在
         if (!userIsExist(competition.getUserCode())) {
             throw new LocalRuntimeException(USER_NOT_EXIST);
@@ -120,23 +105,9 @@ public class AdminServiceImpl implements AdminService {
         }
 
         // 校验审批关系数据是否正确
-        // 主要是判断部门跟用户是否存在
         Map<String, String> settings = competition.getReviewSettings();
-        if (settings == null) {
-            throw new LocalRuntimeException(REVIEW_SETTINGS_ERROR);
-        }
-        settings.forEach((s, o) -> {
-            boolean userRes = userIsExist(o);
-            if (!"0".equals(s)) {
-                boolean depRes = depIsExist(Integer.valueOf(s));
-                if (!depRes) {
-                    throw new LocalRuntimeException(ErrorEnum.DEP_NOT_EXIST);
-                }
-            }
-            if (!userRes) {
-                throw new LocalRuntimeException(ErrorEnum.USER_NOT_EXIST);
-            }
-        });
+        validateReviewSettings(settings);
+
         // 判断活动负责人是否存在
         if (!userIsExist(competition.getUserCode())) {
             throw new LocalRuntimeException(USER_NOT_EXIST);
@@ -184,93 +155,27 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public Map<String, Object> getContestList(Integer pageNum, Integer pageSize) {
-        Page<Competition> competitionPage = adminMapper.selectPage(new Page<>(pageNum, pageSize), new QueryWrapper<>());
-        ArrayList<CompetitionVO> resList = new ArrayList<>();
-        for (Competition record : competitionPage.getRecords()) {
-            CompetitionVO competitionVO = new CompetitionVO();
-            competitionVO.setId(record.getId());
-            competitionVO.setName(record.getName());
-            // 比赛开始时间是报名开始时间
-            LocalDateTime beginTime = record.getRegBeginTime();
-            competitionVO.setBeginTime(beginTime);
-            // 结束时间是评审结束时间
-            LocalDateTime endTime = record.getReviewEndTime();
-            competitionVO.setEndTime(endTime);
-            competitionVO.setIntroduce(record.getIntroduce());
-            String userCode = record.getUserCode();
-            User user = userMapper.selectById(userCode);
-            Integer depId = user.getDepId();
-            Map<String, String> settings = record.getReviewSettings();
-            String reviewer;
-            if (settings.containsKey(depId.toString())) {
-                reviewer = settings.get(depId.toString());
-            } else {
-                reviewer = settings.get("0");
-            }
-            competitionVO.setReviewer(reviewer);
-            LocalDateTime time = LocalDateTime.now();
-            String status;
-            if (time.isAfter(endTime)) {
-                status = "已结束";
-            } else if (time.isBefore(beginTime)) {
-                status = "未开始";
-            } else {
-                status = "进行中";
-            }
-            competitionVO.setStatus(status);
-            Long teamCount = teamMapper.selectCount(new QueryWrapper<Team>().eq("com_id", competitionVO.getId()));
-            if (teamCount == null) teamCount = 0L;
-            competitionVO.setRegNum(teamCount);
-            Long fileCount = workMapper.selectCount(new QueryWrapper<Work>().eq("com_id", competitionVO.getId()));
-            competitionVO.setSubNum(fileCount);
-            competitionVO.setRevNum(reviewMapper.getReviewNum(competitionVO.getId()));
-            resList.add(competitionVO);
-        }
-        return getResultMap(resList, competitionPage.getTotal(), pageNum, pageSize);
+        Page<CompetitionVO> page = new Page<>(pageNum, pageSize);
+        IPage<CompetitionVO> contestListPage = adminMapper.getContestListPage(page);
+        List<CompetitionVO> resList = contestListPage.getRecords();
+        return getResultMap(resList, contestListPage.getTotal(), pageNum, pageSize);
     }
 
     @Override
     public Map<String, Object> getComMangerInfo(Integer pageNum, Integer pageSize, Long comId) {
-        // 结果集从 0 开始，所以这里要减一
-        List<Work> works = workMapper.getWorks((pageNum - 1) * pageSize, pageSize, comId);
+        // 比赛名
+        QueryWrapper<Competition> competitionQueryWrapper = new QueryWrapper<>();
+        competitionQueryWrapper.eq("id", comId);
+        String comName = adminMapper.selectOne(competitionQueryWrapper).getName();
         // 注册数
         Long regNum = teamMapper.selectCount(new QueryWrapper<Team>().eq("com_id", comId));
         // 提交材料数
         Long subNum = workMapper.selectCount(new QueryWrapper<Work>().eq("com_id", comId));
         // 已审批数
         Long revNum = reviewMapper.getReviewNum(comId);
-        ArrayList<ComMangerVo> resList = new ArrayList<>();
-        QueryWrapper<Judge> judgeQueryWrapper = new QueryWrapper<>();
-        works.forEach(work -> {
-            ArrayList<String> judges = new ArrayList<>();
-            ComMangerVo comMangerVo = new ComMangerVo();
-            String workName = work.getWorkName();
-            String userCode = work.getUserCode();
-            judgeQueryWrapper.eq("com_id", comId).eq("user_code", userCode);
-            List<Judge> judgeList = judgeMapper.selectList(judgeQueryWrapper);
-            judgeQueryWrapper.clear();
-            // 判断是否分配评委
-            if (judgeList.isEmpty()) {
-                comMangerVo.setIsAssignJudge(0);
-            } else {
-                judgeList.forEach(judge -> {
-                    if (!userIsExist(judge.getJudgeCode())) {
-                        throw new LocalRuntimeException(ErrorEnum.USER_NOT_EXIST);
-                    }
-                    String judgeName = userMapper.selectById(judge.getJudgeCode()).getName();
-                    judges.add(judgeName);
-                });
-                comMangerVo.setIsAssignJudge(1);
-            }
-            comMangerVo.setUserCode(userCode);
-            comMangerVo.setJudges(judges);
-            comMangerVo.setComId(comId);
-            comMangerVo.setFileName(workName);
-            resList.add(comMangerVo);
-        });
-        QueryWrapper<Competition> competitionQueryWrapper = new QueryWrapper<>();
-        competitionQueryWrapper.eq("id", comId);
-        String comName = adminMapper.selectOne(competitionQueryWrapper).getName();
+        Page<ComMangerVo> page = new Page<>(pageNum, pageSize);
+        page.setOptimizeCountSql(false);
+        List<ComMangerVo> resList = adminMapper.getComMangerInfo(page, comId).getRecords();
         // 返回结果集、提交作品数量、报名数、提交材料数、评审数
         return getComMangerMap(resList, Math.toIntExact(subNum), pageNum, pageSize, regNum, subNum, revNum, comName);
     }
@@ -332,18 +237,6 @@ public class AdminServiceImpl implements AdminService {
     }
 
     /**
-     * 判断是否存在这个部门
-     *
-     * @param id 部门 id
-     * @return 判断结果
-     */
-    public boolean depIsExist(Integer id) {
-        QueryWrapper<Department> wrapper = new QueryWrapper<>();
-        wrapper.eq("id", id);
-        return departmentMapper.exists(wrapper);
-    }
-
-    /**
      * 判断是否存在这个用户
      *
      * @param userCode 用户学号
@@ -387,6 +280,53 @@ public class AdminServiceImpl implements AdminService {
             case "jpg", "jpeg", "png" -> true;
             default -> false;
         };
+    }
+
+    private void validateReviewSettings(Map<String, String> settings) {
+        if (settings == null || settings.isEmpty()) {
+            throw new LocalRuntimeException(REVIEW_SETTINGS_ERROR);
+        }
+
+        // 1) 收集所有审核人账号
+        Set<String> reviewerCodes = settings.values().stream().filter(Objects::nonNull).filter(s -> !s.isBlank()).collect(Collectors.toSet());
+
+        if (reviewerCodes.isEmpty()) {
+            throw new LocalRuntimeException(USER_NOT_EXIST);
+        }
+
+        // 2) 收集所有非0部门ID
+        Set<Integer> depIds = new HashSet<>();
+        for (String key : settings.keySet()) {
+            if (!"0".equals(key)) {
+                try {
+                    depIds.add(Integer.valueOf(key));
+                } catch (NumberFormatException e) {
+                    throw new LocalRuntimeException(ErrorEnum.DEP_NOT_EXIST);
+                }
+            }
+        }
+
+        // 3) 批量查用户
+        List<User> users = userMapper.selectList(
+                new QueryWrapper<User>().select("code").in("code", reviewerCodes)
+        );
+        Set<String> existingCodes = users.stream().map(User::getCode).collect(Collectors.toSet());
+
+        if (existingCodes.size() != reviewerCodes.size()) {
+            throw new LocalRuntimeException(ErrorEnum.USER_NOT_EXIST);
+        }
+
+        // 4) 批量查部门（仅非0）
+        if (!depIds.isEmpty()) {
+            List<Department> deps = departmentMapper.selectList(
+                    new QueryWrapper<Department>().select("id").in("id", depIds)
+            );
+            Set<Integer> existingDepIds = deps.stream().map(Department::getId).collect(Collectors.toSet());
+
+            if (existingDepIds.size() != depIds.size()) {
+                throw new LocalRuntimeException(ErrorEnum.DEP_NOT_EXIST);
+            }
+        }
     }
 
 }
