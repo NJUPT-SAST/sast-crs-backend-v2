@@ -37,9 +37,7 @@ public class AdminServiceImpl implements AdminService {
     private final DepartmentMapper departmentMapper;
     private final FileUtil fileUtil;
 
-    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper,
-                            ReviewMapper reviewMapper, TeamMapper teamMapper,
-                            WorkMapper workMapper, DepartmentMapper departmentMapper, FileUtil fileUtil) {
+    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper, ReviewMapper reviewMapper, TeamMapper teamMapper, WorkMapper workMapper, DepartmentMapper departmentMapper, FileUtil fileUtil) {
         this.adminMapper = adminMapper;
         this.userMapper = userMapper;
         this.fileMapper = fileMapper;
@@ -290,10 +288,7 @@ public class AdminServiceImpl implements AdminService {
         }
 
         // 1) 收集所有审核人账号
-        Set<String> reviewerCodes = settings.values().stream()
-                .filter(Objects::nonNull)
-                .filter(s -> !s.isBlank())
-                .collect(Collectors.toSet());
+        Set<String> reviewerCodes = settings.values().stream().filter(Objects::nonNull).filter(s -> !s.isBlank()).collect(Collectors.toSet());
 
         if (reviewerCodes.isEmpty()) {
             throw new LocalRuntimeException(USER_NOT_EXIST);

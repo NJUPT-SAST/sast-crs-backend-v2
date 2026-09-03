@@ -8,6 +8,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface TeamMapper extends BaseMapper<Team> {
-    TeamInfoWithCom selectTeamInfoWithCom(@Param("comId") Long comId,
-                                      @Param("captainCode") String captainCode);
+    TeamInfoWithCom selectTeamInfoWithCom(@Param("comId") Long comId, @Param("captainCode") String captainCode);
 }

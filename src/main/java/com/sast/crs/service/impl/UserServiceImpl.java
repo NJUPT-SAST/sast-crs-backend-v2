@@ -153,8 +153,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public Map<String, Object> searchComName(String key, Integer cur, Integer limit) {
-        List<Competition> competitions = competitionMapper
-                .selectList(new LambdaQueryWrapper<Competition>().like(Competition::getName, key));
+        List<Competition> competitions = competitionMapper.selectList(new LambdaQueryWrapper<Competition>().like(Competition::getName, key));
         return resultComListMap(competitions, cur, limit);
     }
 
@@ -226,8 +225,7 @@ public class UserServiceImpl implements UserService {
             throw new LocalRuntimeException("作品提交暂未开始");
         }
 
-        JSONArray data = JSONObject.parseObject(jsonData)
-                .getJSONArray("data");
+        JSONArray data = JSONObject.parseObject(jsonData).getJSONArray("data");
         List<WorkSchema> workSchemas = new LinkedList<>();
         String workName = null;
         Set<String> fileInputs = new LinkedHashSet<>();
@@ -281,29 +279,21 @@ public class UserServiceImpl implements UserService {
             }
             workSchemas.add(workSchema);
         }
-        Work workDB = workMapper.selectOne(new LambdaQueryWrapper<Work>()
-                .eq(Work::getComId, competition.getId())
-                .eq(Work::getUserCode, user.getCode()));
+        Work workDB = workMapper.selectOne(new LambdaQueryWrapper<Work>().eq(Work::getComId, competition.getId()).eq(Work::getUserCode, user.getCode()));
         if (workDB != null) {
             workDB.setWorkName(workName);
             workDB.setSchemaContent(JSON.toJSONString(workSchemas));
             workMapper.updateById(workDB);
 
             // 修改作品信息后重置审核状态
-            Review review = reviewMapper.selectOne(new LambdaQueryWrapper<Review>()
-                    .eq(Review::getComId, competition.getId())
-                    .eq(Review::getUserCode, user.getCode()));
+            Review review = reviewMapper.selectOne(new LambdaQueryWrapper<Review>().eq(Review::getComId, competition.getId()).eq(Review::getUserCode, user.getCode()));
             if (review == null) {
                 review = new Review();
                 review.setComId(competition.getId());
                 review.setUserCode(user.getCode());
                 reviewMapper.insert(review);
             } else {
-                reviewMapper.update(null, new LambdaUpdateWrapper<Review>()
-                        .eq(Review::getComId, competition.getId())
-                        .eq(Review::getUserCode, user.getCode())
-                        .set(Review::getAccept, null)
-                        .set(Review::getOpinion, null));
+                reviewMapper.update(null, new LambdaUpdateWrapper<Review>().eq(Review::getComId, competition.getId()).eq(Review::getUserCode, user.getCode()).set(Review::getAccept, null).set(Review::getOpinion, null));
             }
         } else {
             Work work = new Work();
@@ -324,9 +314,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public JSONArray getComSchema(@NotNull User user, Long comId) {
         Competition competition = getCompetition(comId);
-        Work work = workMapper.selectOne(new LambdaQueryWrapper<Work>()
-                .eq(Work::getComId, competition.getId())
-                .eq(Work::getUserCode, user.getCode()));
+        Work work = workMapper.selectOne(new LambdaQueryWrapper<Work>().eq(Work::getComId, competition.getId()).eq(Work::getUserCode, user.getCode()));
         if (work == null)
             throw new LocalRuntimeException(ErrorEnum.HAVE_NOT_UPLOAD_WORK);
         return JSONArray.parseArray(work.getSchemaContent());
@@ -355,53 +343,53 @@ public class UserServiceImpl implements UserService {
         if (competition.getRegBeginTime().isAfter(now)) {
             throw new LocalRuntimeException("报名暂未开始");
         }
-        Team team = teamMapper.selectOne(new LambdaQueryWrapper<Team>()
-                .eq(Team::getComId, comId)
-                .eq(Team::getCaptain, user.getCode()));
+        Team team = teamMapper.selectOne(new LambdaQueryWrapper<Team>().eq(Team::getComId, comId).eq(Team::getCaptain, user.getCode()));
 
         List<User> teamListMembers = new LinkedList<>();
         Set<String> codeSet = new HashSet<>();
         JSONArray teamJSONMembers = jsonObject.getJSONArray("teamMember");
-        Optional.ofNullable(teamJSONMembers)
-                .ifPresent(array -> array.forEach(teamMember -> {
-                    String name = ((JSONObject) teamMember).getString("name");
-                    String code = ((JSONObject) teamMember).getString("code");
-                    //tring college = ((JSONObject) teamMember).getString("college");
-                    //String major = ((JSONObject) teamMember).getString("major");
-                    String contact = ((JSONObject) teamMember).getString("contact");
+        Optional.ofNullable(teamJSONMembers).ifPresent(array -> array.forEach(teamMember -> {
+            String name = ((JSONObject) teamMember).getString("name");
+            String code = ((JSONObject) teamMember).getString("code");
+            //tring college = ((JSONObject) teamMember).getString("college");
+            //String major = ((JSONObject) teamMember).getString("major");
+            String contact = ((JSONObject) teamMember).getString("contact");
 
-                    if (competition.isTeamCom() &&
-                            (StringUtils.isEmpty(name) || StringUtils.isEmpty(code))) {
-                        throw new LocalRuntimeException("队伍成员信息不能留空");
-                    }
-                    // 检查学号姓名是否匹配
+            if (competition.isTeamCom() && (StringUtils.isEmpty(name) || StringUtils.isEmpty(code))) {
+                throw new LocalRuntimeException("队伍成员信息不能留空");
+            }
+            // 检查学号姓名是否匹配
 //                    User member = userMapper.selectOne(new LambdaQueryWrapper<User>()
 //                            .eq(User::getCode, code));
 //                    if (member != null && !member.getName().equals(name)) {
 //                        throw new LocalRuntimeException("成员"+code+"与姓名不匹配，请检查报名信息");
 //                    }
-                    // 获取depID
+            // 获取depID
 //                    Department department = departmentMapper.selectOne(new LambdaQueryWrapper<Department>()
 //                            .eq(Department::getName, college));
 //                    if (department == null) {
 //                        throw new LocalRuntimeException("学院不存在，请检查报名信息");
 //                    }
 
-                    UserExtra extra = new UserExtra() {{
-                        //setMajor(major);
-                        setContact(contact);
-                    }};
+            UserExtra extra = new UserExtra() {
+                {
+                    //setMajor(major);
+                    setContact(contact);
+                }
+            };
 
-                    if (!user.getCode().equals(code)) {
-                        teamListMembers.add(new User() {{
-                            setName(name);
-                            setCode(code);
-                            //setDepId(Integer.MAX_VALUE);
-                            setExtra(extra);
-                        }});
-                        codeSet.add(code);
+            if (!user.getCode().equals(code)) {
+                teamListMembers.add(new User() {
+                    {
+                        setName(name);
+                        setCode(code);
+                        //setDepId(Integer.MAX_VALUE);
+                        setExtra(extra);
                     }
-                }));
+                });
+                codeSet.add(code);
+            }
+        }));
         if (codeSet.size() != teamListMembers.size()) {
             throw new LocalRuntimeException("队伍成员不能重复");
         }
@@ -417,8 +405,7 @@ public class UserServiceImpl implements UserService {
             if (StringUtils.isNotEmpty(teamName))
                 team.setName(teamName);
 
-            if (teamListMembers.size() + 1 < competition.getMinTeamMembers() ||
-                    teamListMembers.size() + 1 > competition.getMaxTeamMembers()) {
+            if (teamListMembers.size() + 1 < competition.getMinTeamMembers() || teamListMembers.size() + 1 > competition.getMaxTeamMembers()) {
                 throw new LocalRuntimeException("队伍成员数不满足要求");
             }
         } else if (!teamListMembers.isEmpty()) {
@@ -429,17 +416,18 @@ public class UserServiceImpl implements UserService {
         List<User> teacherListMembers = new LinkedList<>();
         codeSet.clear();
         JSONArray teacherJSONMembers = jsonObject.getJSONArray("teacherMember");
-        Optional.ofNullable(teacherJSONMembers)
-                .ifPresent(array -> array.forEach(teacherMember -> {
-                    String name = ((JSONObject) teacherMember).getString("name");
-                    String code = ((JSONObject) teacherMember).getString("code");
+        Optional.ofNullable(teacherJSONMembers).ifPresent(array -> array.forEach(teacherMember -> {
+            String name = ((JSONObject) teacherMember).getString("name");
+            String code = ((JSONObject) teacherMember).getString("code");
 
-                    teacherListMembers.add(new User() {{
-                        setName(name);
-                        setCode(code);
-                    }});
-                    codeSet.add(code);
-                }));
+            teacherListMembers.add(new User() {
+                {
+                    setName(name);
+                    setCode(code);
+                }
+            });
+            codeSet.add(code);
+        }));
         if (codeSet.size() != teacherListMembers.size()) {
             throw new LocalRuntimeException("指导老师不能重复");
         }
@@ -456,14 +444,14 @@ public class UserServiceImpl implements UserService {
         if (competition.getRegBeginTime().isAfter(LocalDateTime.now())) {
             // 比赛未开始
             return 0;
-        } else if (competition.getRegBeginTime().isBefore(LocalDateTime.now()) &&
-                competition.getRegEndTime().isAfter(LocalDateTime.now())) {
-            // 比赛正在进行
-            return 1;
-        } else {
-            // 比赛已结束
-            return 2;
-        }
+        } else
+            if (competition.getRegBeginTime().isBefore(LocalDateTime.now()) && competition.getRegEndTime().isAfter(LocalDateTime.now())) {
+                // 比赛正在进行
+                return 1;
+            } else {
+                // 比赛已结束
+                return 2;
+            }
     }
 
     @NotNull
@@ -478,10 +466,7 @@ public class UserServiceImpl implements UserService {
             return fileMap;
         }
 
-        List<File> files = fileMapper.selectList(new LambdaQueryWrapper<File>()
-                .eq(File::getComId, comId)
-                .eq(File::getUserCode, userCode)
-                .in(File::getInput, inputs));
+        List<File> files = fileMapper.selectList(new LambdaQueryWrapper<File>().eq(File::getComId, comId).eq(File::getUserCode, userCode).in(File::getInput, inputs));
         for (File file : files) {
             File previous = fileMap.putIfAbsent(file.getInput(), file);
             if (previous != null) {
@@ -492,9 +477,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @NotNull
-    private Map<String, Object> resultComListMap(List<Competition> competitions,
-                                                 Integer cur,
-                                                 Integer limit) {
+    private Map<String, Object> resultComListMap(List<Competition> competitions, Integer cur, Integer limit) {
         Collections.reverse(competitions);
 
         Map<String, Object> result = new HashMap<>();
@@ -528,9 +511,7 @@ public class UserServiceImpl implements UserService {
 
     @NotNull
     private Team getSignedTeam(String userCode, Long comId) {
-        Team team = teamMapper.selectOne(new LambdaQueryWrapper<Team>()
-                .eq(Team::getComId, comId)
-                .eq(Team::getCaptain, userCode));
+        Team team = teamMapper.selectOne(new LambdaQueryWrapper<Team>().eq(Team::getComId, comId).eq(Team::getCaptain, userCode));
         if (team == null) {
             throw new LocalRuntimeException(ErrorEnum.HAVE_NOT_SIGNED_COM);
         }

@@ -12,8 +12,7 @@ import java.util.stream.Collectors;
 public class CommaSeparatedStringToListTypeHandler extends BaseTypeHandler<List<String>> {
 
     @Override
-    public void setNonNullParameter(PreparedStatement ps, int i, List<String> parameter, JdbcType jdbcType)
-            throws SQLException {
+    public void setNonNullParameter(PreparedStatement ps, int i, List<String> parameter, JdbcType jdbcType) throws SQLException {
         ps.setString(i, String.join(",", parameter));
     }
 
@@ -34,9 +33,6 @@ public class CommaSeparatedStringToListTypeHandler extends BaseTypeHandler<List<
 
     private List<String> parse(String s) {
         if (s == null || s.isBlank()) return Collections.emptyList();
-        return Arrays.stream(s.split(","))
-                .map(String::trim)
-                .filter(str -> !str.isEmpty())
-                .collect(Collectors.toList());
+        return Arrays.stream(s.split(",")).map(String::trim).filter(str -> !str.isEmpty()).collect(Collectors.toList());
     }
 }

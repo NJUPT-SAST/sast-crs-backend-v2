@@ -13,4 +13,3 @@ public class ScoreExportRow {
     private Integer score;
     private String opinion;
 }
-

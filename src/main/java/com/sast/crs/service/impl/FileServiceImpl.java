@@ -198,7 +198,7 @@ public class FileServiceImpl implements FileService {
                     return sub.get("content").asText();
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new LocalRuntimeException("解析作品类型失败");
         }
         return null;

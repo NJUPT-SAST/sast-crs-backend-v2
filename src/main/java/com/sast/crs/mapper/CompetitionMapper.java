@@ -10,5 +10,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface CompetitionMapper extends BaseMapper<Competition> {
     String getTableString(Long comId);
+
     IPage<Competition> selectSignedCompetitions(Page<Competition> page, @Param("userCode") String userCode);
 }

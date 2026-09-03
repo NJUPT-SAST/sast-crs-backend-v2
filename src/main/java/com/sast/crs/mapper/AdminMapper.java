@@ -16,5 +16,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AdminMapper extends BaseMapper<Competition> {
     IPage<ComMangerVo> getComMangerInfo(Page<ComMangerVo> page, @Param("comId") Long comId);
+
     IPage<CompetitionVO> getContestListPage(Page<CompetitionVO> page);
 }
