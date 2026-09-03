@@ -155,8 +155,8 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public Map<String, Object> getContestList(Integer pageNum, Integer pageSize) {
-        Page<CompetitionVO> Page = new Page<>(pageNum, pageSize);
-        IPage<CompetitionVO> contestListPage = adminMapper.getContestListPage(Page);
+        Page<CompetitionVO> page = new Page<>(pageNum, pageSize);
+        IPage<CompetitionVO> contestListPage = adminMapper.getContestListPage(page);
         List<CompetitionVO> resList = contestListPage.getRecords();
         return getResultMap(resList, contestListPage.getTotal(), pageNum, pageSize);
     }
