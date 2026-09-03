@@ -51,6 +51,8 @@ services:
       DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DATABASE: ${REDIS_DATABASE:-0}
       SERVER_PORT: 1080
       # 容器内必须监听 0.0.0.0，否则宿主机端口转发无法到达
       SERVER_ADDRESS: 0.0.0.0
