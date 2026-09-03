@@ -4,7 +4,7 @@ import com.sast.crs.pojo.TraceLog;
 import com.sast.crs.util.CommonUtil;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.MDC;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 

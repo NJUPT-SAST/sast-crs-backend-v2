@@ -2,6 +2,7 @@ package com.sast.crs.util;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -86,10 +87,10 @@ public class COSUtil {
         if (StringUtils.isEmpty(content))
             return false;
         try {
-            String hostFromUser = new URL(content).getHost();
+            String hostFromUser = URI.create(content).toURL().getHost();
             String host = endpoint.substring(8);
             return host.equalsIgnoreCase(hostFromUser);
-        } catch (MalformedURLException e) {
+        } catch (MalformedURLException | IllegalArgumentException e) {
             return false;
         }
     }
