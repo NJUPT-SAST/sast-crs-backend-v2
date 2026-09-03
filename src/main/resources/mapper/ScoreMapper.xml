@@ -53,7 +53,7 @@
                                AND s.judge_code = #{code}
         WHERE w.com_id = #{comId}
           AND w.user_code IN (SELECT user_code
-                              FROM score
+                              FROM judge
                               WHERE com_id = #{comId}
                                 AND judge_code = #{code})
         ORDER BY w.id DESC
