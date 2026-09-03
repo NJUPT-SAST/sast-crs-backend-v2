@@ -16,6 +16,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # PR 的 checkout 是 detached HEAD，只有 origin/main 远程引用；
+      # 为 spotless ratchetFrom main 创建本地 main 引用
+      - name: Create local main ref
+        run: git branch main origin/main 2>/dev/null || git branch main HEAD
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
