@@ -7,10 +7,11 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,7 +36,7 @@ public class RedisUtil {
     public Boolean expire(String key, long time) {
         try {
             if (time > 0) {
-                redisTemplate.expire(prefix + key, time, TimeUnit.SECONDS);
+                redisTemplate.expire(prefix + key, Duration.ofSeconds(time));
             }
             return true;
         } catch (Exception e) {
@@ -53,7 +54,7 @@ public class RedisUtil {
     public Boolean expire(String key, long time, TimeUnit timeUnit) {
         try {
             if (time > 0) {
-                redisTemplate.expire(prefix + key, time, timeUnit);
+                redisTemplate.expire(prefix + key, Duration.ofNanos(timeUnit.toNanos(time)));
             }
             return true;
         } catch (Exception e) {
@@ -143,7 +144,7 @@ public class RedisUtil {
             @Override
             public Object doInRedis(@NotNull RedisConnection connection) throws DataAccessException {
                 //队列没有元素会阻塞操作，直到队列获取新的元素或超时
-                return connection.bRPop(10, (prefix + MESSAGE_KEY).getBytes());
+                return connection.listCommands().bRPop(10, (prefix + MESSAGE_KEY).getBytes());
             }
         }, new StringRedisSerializer());
     }
@@ -216,7 +217,7 @@ public class RedisUtil {
     public boolean set(String key, Object value, long time, TimeUnit timeUnit) {
         try {
             if (time > 0) {
-                redisTemplate.opsForValue().set(prefix + key, value, time, timeUnit);
+                redisTemplate.opsForValue().set(prefix + key, value, Duration.ofNanos(timeUnit.toNanos(time)));
             } else {
                 set(prefix + key, value);
             }
@@ -238,7 +239,7 @@ public class RedisUtil {
      */
     public boolean setnx(String key, Object value, long time, TimeUnit timeUnit) {
         try {
-            return Optional.ofNullable(redisTemplate.opsForValue().setIfAbsent(prefix + key, value, time, timeUnit)).orElse(false);
+            return Optional.ofNullable(redisTemplate.opsForValue().setIfAbsent(prefix + key, value, Duration.ofNanos(timeUnit.toNanos(time)))).orElse(false);
         } catch (Exception e) {
             e.printStackTrace();
             return false;

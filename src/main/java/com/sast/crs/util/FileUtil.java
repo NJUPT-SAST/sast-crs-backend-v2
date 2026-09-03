@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
@@ -134,8 +135,8 @@ public class FileUtil {
     public static String getObjectName(String urlString) {
         URL url;
         try {
-            url = new URL(urlString);
-        } catch (MalformedURLException e) {
+            url = URI.create(urlString).toURL();
+        } catch (MalformedURLException | IllegalArgumentException e) {
             throw new LocalRuntimeException(ErrorEnum.INVALID_URL_ERROR);
         }
         return url.getPath().substring(1);

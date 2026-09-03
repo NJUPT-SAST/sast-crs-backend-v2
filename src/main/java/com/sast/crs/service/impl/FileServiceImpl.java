@@ -186,8 +186,8 @@ public class FileServiceImpl implements FileService {
         try {
             JsonNode node = objectMapper.readTree(work.getSchemaContent());
             for (JsonNode sub : node) {
-                if (CommonConst.WORK_TYPE.equals(sub.get("input").asText())) {
-                    return sub.get("content").asText();
+                if (CommonConst.WORK_TYPE.equals(sub.get("input").asString())) {
+                    return sub.get("content").asString();
                 }
             }
         } catch (Exception e) {
@@ -200,8 +200,8 @@ public class FileServiceImpl implements FileService {
         try {
             JsonNode node = objectMapper.readTree(schemaContent);
             for (JsonNode sub : node) {
-                if (CommonConst.WORK_TYPE.equals(sub.get("input").asText())) {
-                    return sub.get("content").asText();
+                if (CommonConst.WORK_TYPE.equals(sub.get("input").asString())) {
+                    return sub.get("content").asString();
                 }
             }
         } catch (Exception e) {
