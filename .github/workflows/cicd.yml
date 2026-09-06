@@ -1,0 +1,128 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  SERVICE_NAME: sast-crs-backend-v2
+  REGISTRY_PREFIX: sast
+  TCR_HOST: ccr.ccs.tencentyun.com
+  TCR_NAMESPACE: sast
+
+jobs:
+  # 保留 job 名 build：分支保护 ruleset 的必过 check 依赖它，勿改名
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 拉取完整历史，spotless ratchet 需要 main 分支引用
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # PR 的 checkout 是 detached HEAD；幂等地为 spotless ratchetFrom main 创建本地 main 引用
+      - name: Create local main ref
+        run: |
+          if ! git rev-parse --verify --quiet main >/dev/null 2>&1; then
+            git branch main origin/main
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build with Maven (spotless + package)
+        run: mvn -B package
+
+  # 仅 push 到 main 时执行；PR 不部署
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get short Git commit hash
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to TCR
+        run: |
+          echo "${{ secrets.TCR_PASSWORD }}" \
+            | docker login ${{ env.TCR_HOST }} \
+                -u "${{ secrets.TCR_USERNAME }}" --password-stdin
+
+      - name: Build and push to TCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.TCR_HOST }}/${{ env.TCR_NAMESPACE }}/${{ env.SERVICE_NAME }}:${{ steps.vars.outputs.sha_short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Execute Deployment Script on Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # --- 以下脚本在 Debian 服务器上执行 ---
+            set -e
+
+            SERVICE_DIR="/data/${{ env.SERVICE_NAME }}"
+            IMAGE_NAME="${{ env.REGISTRY_PREFIX }}/${{ env.SERVICE_NAME }}"
+            REMOTE_IMAGE="${{ env.TCR_HOST }}/${{ env.TCR_NAMESPACE }}/${{ env.SERVICE_NAME }}"
+            NEW_VERSION_TAG="${{ steps.vars.outputs.sha_short }}"
+
+            cd ${SERVICE_DIR}
+
+            echo "🚀 部署开始，版本: ${NEW_VERSION_TAG}"
+
+            echo "📦 从 TCR 拉取新镜像（内网）..."
+            for i in 1 2 3; do
+              docker pull "${REMOTE_IMAGE}:${NEW_VERSION_TAG}" && break
+              echo "  - 拉取失败，${i}/3，10s 后重试（个人版为共享存储，push 后可能短暂不可见）"
+              sleep 10
+            done
+
+            docker image inspect "${REMOTE_IMAGE}:${NEW_VERSION_TAG}" >/dev/null 2>&1 || {
+              echo "❌ 镜像拉取失败，中止部署"; exit 1; }
+
+            # retag 为本地命名，compose 文件无需感知 TCR 地址
+            docker tag "${REMOTE_IMAGE}:${NEW_VERSION_TAG}" "${IMAGE_NAME}:${NEW_VERSION_TAG}"
+
+            echo "🔄 处理镜像备份与轮换..."
+            if docker image inspect "${IMAGE_NAME}:current" >/dev/null 2>&1; then
+              if docker image inspect "${IMAGE_NAME}:backup" >/dev/null 2>&1; then
+                echo "  - 发现并删除旧的备份 'backup'..."
+                docker rmi "${IMAGE_NAME}:backup"
+              fi
+              echo "  - 将 'current' 镜像标记为 'backup'..."
+              docker tag "${IMAGE_NAME}:current" "${IMAGE_NAME}:backup"
+            else
+              echo "  - 未发现 'current' 镜像，跳过备份 (首次部署)"
+            fi
+
+            echo "✅ 将新镜像 (${NEW_VERSION_TAG}) 标记为 'current'..."
+            docker tag "${IMAGE_NAME}:${NEW_VERSION_TAG}" "${IMAGE_NAME}:current"
+
+            echo "🚀 使用 Docker Compose 启动新服务..."
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            echo "🧹 清理临时镜像标签..."
+            docker rmi "${REMOTE_IMAGE}:${NEW_VERSION_TAG}" || true
+            docker image prune -f
+
+            echo "🎉 部署成功！当前运行版本: ${NEW_VERSION_TAG}"
