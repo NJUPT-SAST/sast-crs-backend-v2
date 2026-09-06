@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]   # dev 只跑 build；deploy 有 if 守护，仅 push main 时部署
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 env:
   SERVICE_NAME: sast-crs-backend-v2
