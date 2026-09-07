@@ -76,6 +76,13 @@ public class JwtUtil {
         return expire <= 0;
     }
 
+    /**
+     * 获取 Redis 中登录 Token 的剩余有效时间（秒）。
+     */
+    public Long getTokenExpire(User user) {
+        return redisUtil.getExpire(RedisKeyConst.getTokenKey(user));
+    }
+
     public void reFreshToken(User user) {
         redisUtil.expire(RedisKeyConst.getTokenKey(user), 1, TimeUnit.HOURS);
     }

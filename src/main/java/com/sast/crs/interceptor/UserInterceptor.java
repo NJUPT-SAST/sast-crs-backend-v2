@@ -20,6 +20,8 @@ import java.lang.reflect.Method;
 
 @Component
 public class UserInterceptor implements HandlerInterceptor {
+    private static final long TOKEN_REFRESH_THRESHOLD_SECONDS = 30 * 60;
+
     public static ThreadLocal<User> userHolder = new ThreadLocal<>();
 
     private final JwtUtil jwtUtil;
@@ -47,7 +49,8 @@ public class UserInterceptor implements HandlerInterceptor {
         if (user == null)
             throw new LocalRuntimeException(ErrorEnum.TOKEN_ERROR);
         // 登录过期
-        if (jwtUtil.isExpired(user))
+        Long tokenExpire = jwtUtil.getTokenExpire(user);
+        if (tokenExpire == null || tokenExpire <= 0)
             throw new LocalRuntimeException(ErrorEnum.EXPIRED_LOGIN);
         User userFromDB = userMapper.selectById(user.getCode());
         // 判断是否是已知用户
@@ -58,7 +61,8 @@ public class UserInterceptor implements HandlerInterceptor {
             throw new LocalRuntimeException(ErrorEnum.NO_ROLE);
         userHolder.set(userFromDB);
         // 更新redis中的token持续时间
-        jwtUtil.reFreshToken(userFromDB);
+        if (tokenExpire <= TOKEN_REFRESH_THRESHOLD_SECONDS)
+            jwtUtil.reFreshToken(userFromDB);
         return true;
     }
 
