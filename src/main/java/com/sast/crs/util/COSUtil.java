@@ -47,9 +47,14 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Component
 public class COSUtil {
-    private final Region region;
-    private final COSCredentials credentials;
-    private final ClientConfig clientConfig;
+
+    /**
+     * Bucket中的文件夹：PUBLIC为公读（比赛封面），PRIVATE为私有（作品文件）
+     */
+    public enum Folder {
+        PUBLIC, PRIVATE
+    }
+
     private final COSClient cosClient;
     private final String bucketName;
     private final String endpoint;
@@ -59,10 +64,8 @@ public class COSUtil {
     private final Integer downloadExpiredTime;
 
     public COSUtil(@Value("${file.COS.secretId:}") String secretId, @Value("${file.COS.secretKey:}") String secretKey, @Value("${file.COS.region}") String region, @Value("${file.COS.uploadExpiredTime:}") Integer uploadExpiredTime, @Value("${file.COS.downloadExpiredTime:}") Integer downloadExpiredTime, @Value("${file.COS.bucketName:}") String bucketName, @Value("${file.COS.publicFolder:}") String publicFolder, @Value("${file.COS.privateFolder:}") String privateFolder) {
-        this.credentials = new BasicCOSCredentials(secretId, secretKey);
-        this.region = new Region(region);
-        this.clientConfig = new ClientConfig(this.region);
-        this.cosClient = new COSClient(credentials, clientConfig);
+        COSCredentials credentials = new BasicCOSCredentials(secretId, secretKey);
+        this.cosClient = new COSClient(credentials, new ClientConfig(new Region(region)));
         this.bucketName = bucketName;
         this.publicFolder = publicFolder;
         this.privateFolder = privateFolder;
@@ -71,11 +74,112 @@ public class COSUtil {
         this.downloadExpiredTime = downloadExpiredTime;
     }
 
-    private String getBaseFolderName(int number) {
-        if (FileUtil.PUBLIC_FOLDER == number)
-            return publicFolder;
-        else
-            return privateFolder;
+    private String getBaseFolderName(Folder folder) {
+        return folder == Folder.PUBLIC ? publicFolder : privateFolder;
+    }
+
+    /**
+     * 向私有Bucket上传作品文件 文件路径格式
+     * //buckName.endpoint/comId/work/teamId/input-uuid-fileName
+     *
+     * @param filename 要上传的文件名
+     * @param comId    比赛ID
+     * @param teamId   队伍ID
+     * @param input    输入框名
+     * @return 文件的URL和没有参数的url
+     */
+    public Map<String, String> getUploadCertificate(@NotNull String filename, @NotNull Long comId, @NotNull Long teamId, @NotNull String input) {
+        // 文件路径格式 comId/work/teamId/input-fileName
+        String objectName = comId + "/work/" + teamId + "/" + input + "-" + CommonUtil.creatShortUUID() + "-" + filename;
+        return createUploadCertificate(objectName, Folder.PRIVATE);
+    }
+
+    /**
+     * 向公共Bucket上传比赛封面（仅允许jpg png格式，且大小小于5M） 文件路径格式
+     * //buckName.endpoint/crs-public/comId/cover/fileName
+     *
+     * @param file  封面
+     * @param comId 比赛ID
+     * @return 封面的URL
+     */
+    public String uploadCover(@NotNull MultipartFile file, @NotNull Long comId) {
+        // 文件路径格式 comId/cover/fileName
+        String objectName = comId + "/cover/" + file.getOriginalFilename();
+
+        return uploadFile(file, objectName, Folder.PUBLIC);
+    }
+
+    /**
+     * 删除远程的文件
+     *
+     * @param url    文件的完整URL
+     * @param folder 文件所在的文件夹
+     */
+    public void deleteFile(String url, Folder folder) {
+        log.info("删除COS中的文件，文件地址：{}", url);
+        String baseFolderName = getBaseFolderName(folder);
+        String objectName = getObjectNameCOS(url);
+        String key = baseFolderName + "/" + objectName;
+        cosClient.deleteObject(bucketName, key);
+    }
+
+    /**
+     * 获取下载凭证（仅针对私有的Bucket）
+     *
+     * @param url 文件url
+     * @return url 带有凭证的url
+     */
+    public String getDownloadCertificate(String url) {
+        log.info("获取从COS下载凭证，文件地址：{}", url);
+        String objectName = getObjectNameCOS(url);
+        String key = privateFolder + "/" + objectName;
+        Date expirationDate = new Date(System.currentTimeMillis() + downloadExpiredTime * 60 * 1000);
+        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(bucketName, key, HttpMethodName.GET);
+        req.setExpiration(expirationDate);
+        req.putCustomRequestHeader(Headers.HOST, cosClient.getClientConfig().getEndpointBuilder().buildGeneralApiEndpoint(bucketName));
+
+        URL presignedUrl = cosClient.generatePresignedUrl(req);
+        return presignedUrl.toString();
+    }
+
+    /**
+     * 打包下载文件
+     * 已知问题：
+     * 在下载时浏览器不会显示下载进度
+     *
+     * @param response HTTP响应
+     * @param files    List<File>
+     * @param zipName  zip文件名
+     */
+    public void downloadPackFile(@NotNull HttpServletResponse response, @NotNull List<File> files, @NotNull String zipName) throws IOException {
+        if (files.isEmpty()) {
+            throw new LocalRuntimeException(ErrorEnum.COS_FILE_NOT_EXIST);
+        }
+        response.reset();
+        response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        String headerFilename = "filename=\"" + zipName + "\"; filename*=utf-8''" + URLEncoder.encode(zipName, StandardCharsets.UTF_8);
+        response.addHeader("Content-disposition", "attachment; " + headerFilename);
+
+        ServletOutputStream outputStream = response.getOutputStream();
+        ZipArchiveOutputStream zipStream = new ZipArchiveOutputStream(outputStream);
+        zipStream.setUseZip64(Zip64Mode.AsNeeded);
+        for (File file : files) {
+            log.info("获取COS中文件的比特流，文件地址：{}", file.getUrl());
+            String objectName = getObjectNameCOS(file.getUrl());
+            GetObjectRequest getObjectRequest = new GetObjectRequest(bucketName, privateFolder + "/" + objectName);
+            try {
+                COSObject cosObject = cosClient.getObject(getObjectRequest);
+                ZipArchiveEntry entry = new ZipArchiveEntry(file.getInput() + "-" + getOriginalFilename(file.getUrl()));
+                zipStream.putArchiveEntry(entry);
+                zipStream.write(IoUtils.toByteArray(cosObject.getObjectContent()));
+                zipStream.closeArchiveEntry();
+            } catch (RuntimeException e) {
+                zipStream.close();
+                e.printStackTrace();
+                throw new LocalRuntimeException(ErrorEnum.COS_FAILED_DOWNLOAD_ERROR);
+            }
+        }
+        zipStream.close();
     }
 
     /**
@@ -83,7 +187,7 @@ public class COSUtil {
      *
      * @param content 字符串内容
      */
-    public Boolean isCOSBucketURL(String content) {
+    public Boolean isBucketURL(String content) {
         if (StringUtils.isEmpty(content))
             return false;
         try {
@@ -96,28 +200,67 @@ public class COSUtil {
     }
 
     /**
-     * 删除COS上的文件
+     * 获得作品文件的原始文件名
      *
-     * @param url          文件的完整URL
-     * @param folderNumber Bucket对应的编号
+     * @param url 文件在COS上的URL
+     * @return 作品文件原始文件名
      */
-    public void deleteFileCOS(String url, int folderNumber) {
-        log.info("删除COS中的文件，文件地址：{}", url);
-        String baseFolderName = getBaseFolderName(folderNumber);
-        String objectName = FileUtil.getObjectNameCOS(url);
-        String key = baseFolderName + "/" + objectName;
-        cosClient.deleteObject(bucketName, key);
+    @NotNull
+    public static String getOriginalFilename(String url) {
+        String name = getFileName(url); // 得到的是 1-xxxxxxxx-example.zip
+        return name.substring(name.indexOf("-") + 10); // 得到example.zip
+    }
+
+    /**
+     * 通过URL获取文件路径（COS）
+     *
+     * @param urlString 文件的地址 例：https://endpoint/path/filename.zip
+     * @return 文件路径 例：path/filename.zip
+     */
+    @NotNull
+    public static String getObjectName(String urlString) {
+        URL url;
+        try {
+            url = URI.create(urlString).toURL();
+        } catch (MalformedURLException | IllegalArgumentException e) {
+            throw new LocalRuntimeException(ErrorEnum.INVALID_URL_ERROR);
+        }
+        return url.getPath().substring(1);
+    }
+
+    /**
+     * 通过URL获取文件路径 COS
+     *
+     * @param urlString 文件的地址 例：https://endpoint/baseFolder/path/filename.zip
+     * @return 文件路径 例：path/filename.zip
+     */
+    @NotNull
+    public static String getObjectNameCOS(String urlString) {
+        String path = getObjectName(urlString);
+        return path.substring(path.indexOf("/") + 1);
+    }
+
+    /**
+     * 通过URL获取文件名
+     *
+     * @param urlString 文件的完整URL
+     * @return 文件名 例：example.zip
+     */
+    @NotNull
+    public static String getFileName(String urlString) {
+        String objectName = getObjectNameCOS(urlString);
+        return objectName.substring(objectName.lastIndexOf("/") + 1);
     }
 
     /**
      * 获取上传凭证
      *
-     * @param objectName   文件在COS中的路径，如 example/example.zip
-     * @param bucketNumber Bucket对应的编号
+     * @param objectName 文件在COS中的路径，如 example/example.zip
+     * @param folder     文件所在的文件夹
      * @return 文件的URL和没有参数的文件URL
      */
-    public Map<String, String> getUploadCertificateCOS(String objectName, int bucketNumber) {
-        String baseFolderName = getBaseFolderName(bucketNumber);
+    private Map<String, String> createUploadCertificate(String objectName, Folder folder) {
+        String baseFolderName = getBaseFolderName(folder);
         String key = baseFolderName + "/" + objectName;
         String clearUrl = endpoint + "/" + key;
         log.info("向COS获取上传凭证，文件地址：{}", clearUrl);
@@ -140,36 +283,16 @@ public class COSUtil {
     }
 
     /**
-     * 获取下载凭证（仅针对私有的Bucket）
-     *
-     * @param url 文件url
-     * @return url 带有凭证的url
-     */
-    public String getDownloadCertificate(String url) {
-        log.info("获取从COS下载凭证，文件地址：{}", url);
-        String objectName = FileUtil.getObjectNameCOS(url);
-        String key = privateFolder + "/" + objectName;
-        String clearUrl = endpoint + "/" + key;
-        Date expirationDate = new Date(System.currentTimeMillis() + downloadExpiredTime * 60 * 1000);
-        GeneratePresignedUrlRequest req = new GeneratePresignedUrlRequest(bucketName, key, HttpMethodName.GET);
-        req.setExpiration(expirationDate);
-        req.putCustomRequestHeader(Headers.HOST, cosClient.getClientConfig().getEndpointBuilder().buildGeneralApiEndpoint(bucketName));
-
-        URL presignedUrl = cosClient.generatePresignedUrl(req);
-        return presignedUrl.toString();
-    }
-
-    /**
      * 向COS上传文件
      *
-     * @param file         要上传的文件
-     * @param objectName   文件在COS中的路径，如 example/example.zip
-     * @param bucketNumber Bucket对应的编号
+     * @param file       要上传的文件
+     * @param objectName 文件在COS中的路径，如 example/example.zip
+     * @param folder     文件所在的文件夹
      * @return 文件的URL
      */
     @NotNull
-    public String uploadFileCOS(MultipartFile file, @NotNull String objectName, int bucketNumber) {
-        String baseFolderName = getBaseFolderName(bucketNumber);
+    private String uploadFile(MultipartFile file, @NotNull String objectName, Folder folder) {
+        String baseFolderName = getBaseFolderName(folder);
         String key = baseFolderName + "/" + objectName;
         String clearUrl = endpoint + "/" + key;
         log.info("向COS上传文件，文件地址：{}", clearUrl);
@@ -183,45 +306,5 @@ public class COSUtil {
         }
         log.info("上传成功，文件URL：{}", clearUrl);
         return clearUrl;
-    }
-
-    /**
-     * 打包下载文件
-     * 已知问题：
-     * 在下载时浏览器不会显示文下载进度
-     *
-     * @param response HTTP响应
-     * @param files    List<File>
-     * @param zipName  zip文件名
-     */
-    public void downloadPackFileCOS(@NotNull HttpServletResponse response, @NotNull List<File> files, @NotNull String zipName) throws IOException {
-        if (files.isEmpty()) {
-            throw new LocalRuntimeException(ErrorEnum.COS_FILE_NOT_EXIST);
-        }
-        response.reset();
-        response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
-        String headerFilename = "filename=\"" + zipName + "\"; filename*=utf-8''" + URLEncoder.encode(zipName, StandardCharsets.UTF_8);
-        response.addHeader("Content-disposition", "attachment; " + headerFilename);
-
-        ServletOutputStream outputStream = response.getOutputStream();
-        ZipArchiveOutputStream zipStream = new ZipArchiveOutputStream(outputStream);
-        zipStream.setUseZip64(Zip64Mode.AsNeeded);
-        for (File file : files) {
-            log.info("获取COS中文件的比特流，文件地址：{}", file.getUrl());
-            String objectName = FileUtil.getObjectNameCOS(file.getUrl());
-            GetObjectRequest getObjectRequest = new GetObjectRequest(bucketName, privateFolder + "/" + objectName);
-            try {
-                COSObject cosObject = cosClient.getObject(getObjectRequest);
-                ZipArchiveEntry entry = new ZipArchiveEntry(file.getInput() + "-" + FileUtil.getOriginalFilename(file.getUrl()));
-                zipStream.putArchiveEntry(entry);
-                zipStream.write(IoUtils.toByteArray(cosObject.getObjectContent()));
-                zipStream.closeArchiveEntry();
-            } catch (RuntimeException e) {
-                zipStream.close();
-                e.printStackTrace();
-                throw new LocalRuntimeException(ErrorEnum.COS_FAILED_DOWNLOAD_ERROR);
-            }
-        }
-        zipStream.close();
     }
 }

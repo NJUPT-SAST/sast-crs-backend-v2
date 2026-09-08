@@ -11,7 +11,7 @@ import com.sast.crs.mapper.ReviewMapper;
 import com.sast.crs.model.*;
 import com.sast.crs.service.ReviewService;
 import com.sast.crs.util.AccountImportUtil;
-import com.sast.crs.util.FileUtil;
+import com.sast.crs.util.COSUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -109,7 +109,7 @@ public class ReviewServiceImpl implements ReviewService {
         if (urls != null) {
             for (Object url : urls) {
                 String sUrl = url.toString();
-                accessories.add(new Accessories(FileUtil.getOriginalFilename(sUrl), sUrl));
+                accessories.add(new Accessories(COSUtil.getOriginalFilename(sUrl), sUrl));
             }
         }
         String teamName = reviewMapper.getTeamName(comId, captainId);

@@ -20,7 +20,7 @@ import com.sast.crs.model.JudgeAccountVO;
 import com.sast.crs.model.WhiteList;
 import com.sast.crs.service.AdminService;
 import com.sast.crs.util.AccountImportUtil;
-import com.sast.crs.util.FileUtil;
+import com.sast.crs.util.COSUtil;
 import com.sast.crs.util.SecureUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -49,9 +49,9 @@ public class AdminServiceImpl implements AdminService {
     private final JudgeMapper judgeMapper;
     private final WhiteListMapper whiteListMapper;
     private final AccountImportUtil accountImportUtil;
-    private final FileUtil fileUtil;
+    private final COSUtil cosUtil;
 
-    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper, ReviewMapper reviewMapper, TeamMapper teamMapper, WorkMapper workMapper, DepartmentMapper departmentMapper, JudgeMapper judgeMapper, WhiteListMapper whiteListMapper, AccountImportUtil accountImportUtil, FileUtil fileUtil) {
+    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper, ReviewMapper reviewMapper, TeamMapper teamMapper, WorkMapper workMapper, DepartmentMapper departmentMapper, JudgeMapper judgeMapper, WhiteListMapper whiteListMapper, AccountImportUtil accountImportUtil, COSUtil cosUtil) {
         this.adminMapper = adminMapper;
         this.userMapper = userMapper;
         this.fileMapper = fileMapper;
@@ -62,7 +62,7 @@ public class AdminServiceImpl implements AdminService {
         this.judgeMapper = judgeMapper;
         this.whiteListMapper = whiteListMapper;
         this.accountImportUtil = accountImportUtil;
-        this.fileUtil = fileUtil;
+        this.cosUtil = cosUtil;
     }
 
     @Override
@@ -224,7 +224,7 @@ public class AdminServiceImpl implements AdminService {
         competitionWrapper.select("name").eq("id", comId);
         String comName = adminMapper.selectOne(competitionWrapper).getName();
         String fileName = comName + '-' + userCode + ".zip";
-        fileUtil.downloadPackFile(response, files, fileName);
+        cosUtil.downloadPackFile(response, files, fileName);
     }
 
     public <T> Map<String, Object> getResultMap(List<T> objects, Long num, Integer pageNum, Integer pageSize) {
@@ -284,7 +284,10 @@ public class AdminServiceImpl implements AdminService {
         if (typeName != null && !isImage(typeName)) {
             throw new LocalRuntimeException(ErrorEnum.INVALID_FILE_TYPE_ERROR);
         }
-        return fileUtil.uploadCover(cover, comId);
+        if (cover.getSize() > 5242880) {
+            throw new LocalRuntimeException("图片大小超出限制(5MB)");
+        }
+        return cosUtil.uploadCover(cover, comId);
     }
 
     /**

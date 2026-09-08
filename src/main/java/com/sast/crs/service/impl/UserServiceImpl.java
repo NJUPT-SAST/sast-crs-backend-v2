@@ -20,7 +20,7 @@ import com.sast.crs.model.WorkSchema;
 import com.sast.crs.pojo.UserResponse;
 import com.sast.crs.service.UserService;
 import com.sast.crs.util.CommonUtil;
-import com.sast.crs.util.FileUtil;
+import com.sast.crs.util.COSUtil;
 import com.sast.crs.util.RedisUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -36,7 +36,7 @@ import java.util.*;
 @Slf4j
 @Service
 public class UserServiceImpl implements UserService {
-    private FileUtil fileUtil;
+    private COSUtil cosUtil;
     private RedisUtil redisUtil;
     private WorkMapper workMapper;
     private TeamMapper teamMapper;
@@ -49,8 +49,8 @@ public class UserServiceImpl implements UserService {
     private String defaultCover;
 
     @Autowired
-    public void setFileUtil(FileUtil fileUtil) {
-        this.fileUtil = fileUtil;
+    public void setCosUtil(COSUtil cosUtil) {
+        this.cosUtil = cosUtil;
     }
 
     @Autowired
@@ -177,14 +177,20 @@ public class UserServiceImpl implements UserService {
         Competition competition = getCompetition(comId);
         Team team = getSignedTeam(user.getCode(), competition.getId());
 
+        // 检查文件格式是否允许上传
+        String typeName = CommonUtil.getTypeByFilename(filename);
+        if (typeName == null || !CommonUtil.isAllowUploadType(typeName)) {
+            throw new LocalRuntimeException(ErrorEnum.INVALID_FILE_TYPE_ERROR);
+        }
+
         // 检查redis缓存
         String key = RedisKeyConst.getWorkFileCacheKey(user.getCode(), input);
         if (redisUtil.hasKey(key)) {
             FileCache cache = JSON.parseObject((String) redisUtil.get(key), FileCache.class);
-            fileUtil.deleteFileCOS(cache.getUrl(), FileUtil.PRIVATE_FOLDER);
+            cosUtil.deleteFile(cache.getUrl(), COSUtil.Folder.PRIVATE);
             redisUtil.del(key);
         }
-        Map<String, String> urlMap = fileUtil.getUploadCertificate(filename, comId, team.getId(), input);
+        Map<String, String> urlMap = cosUtil.getUploadCertificate(filename, comId, team.getId(), input);
         FileCache uploadFile = new FileCache();
         uploadFile.setComId(comId);
         uploadFile.setUserCode(user.getCode());
@@ -238,7 +244,7 @@ public class UserServiceImpl implements UserService {
             if (title.equals("作品名称") || title.equals("作品名") || title.equals("项目名称"))
                 workName = content;
 
-            if (fileUtil.isBucketURL(content)) {
+            if (cosUtil.isBucketURL(content)) {
                 fileInputs.add(title);
             }
         }
@@ -255,7 +261,7 @@ public class UserServiceImpl implements UserService {
             workSchema.setContent(content);
             workSchema.setIsFile(false);
             // 单独处理文件
-            if (fileUtil.isBucketURL(content)) {
+            if (cosUtil.isBucketURL(content)) {
                 String key = RedisKeyConst.getWorkFileCacheKey(user.getCode(), title);
                 File fileDB = fileDBMap.get(title);
                 if (fileDB == null) {
@@ -268,7 +274,7 @@ public class UserServiceImpl implements UserService {
                 } else if (!fileDB.getUrl().equalsIgnoreCase(content)) {
                     if (!redisUtil.hasKey(key))
                         throw new LocalRuntimeException(ErrorEnum.FILE_EXPIRED_ERROR);
-                    fileUtil.deleteFile(fileDB.getUrl(), FileUtil.PRIVATE_BUCKET);
+                    cosUtil.deleteFile(fileDB.getUrl(), COSUtil.Folder.PRIVATE);
                     FileCache cache = JSON.parseObject((String) redisUtil.get(key), FileCache.class);
                     fileDB.setUrl(cache.getUrl());
                     fileMapper.updateById(fileDB);
