@@ -4,17 +4,15 @@ import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.util.MapUtils;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.sast.crs.annotation.CheckRole;
 import com.sast.crs.annotation.OperateLog;
 import com.sast.crs.entity.*;
 import com.sast.crs.enums.UserRoleEnum;
-import com.sast.crs.mapper.WhiteListMapper;
-import com.sast.crs.model.WhiteList;
-import com.sast.crs.util.ExcelForJudgeUtil;
+import com.sast.crs.model.JudgeAccountRequest;
 import com.sast.crs.model.WorkOutput;
+import com.sast.crs.response.GlobalResponse;
 import com.sast.crs.service.*;
-import com.sast.crs.util.ExcelForWhiteListUtil;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -35,18 +33,12 @@ public class AdminController {
     private final FileService fileService;
     private final ScoreService scoreService;
     private final NoticeService noticeService;
-    private final ExcelForJudgeUtil excelForJudgeUtil;
-    private final ExcelForWhiteListUtil whiteListUtil;
-    private final WhiteListMapper whiteListMapper;
 
-    public AdminController(AdminService adminService, FileService fileService, ScoreService scoreService, NoticeService noticeService, ExcelForJudgeUtil excelForJudgeUtil, ExcelForWhiteListUtil whiteListUtil, WhiteListMapper whiteListMapper) {
+    public AdminController(AdminService adminService, FileService fileService, ScoreService scoreService, NoticeService noticeService) {
         this.adminService = adminService;
         this.fileService = fileService;
         this.scoreService = scoreService;
         this.noticeService = noticeService;
-        this.excelForJudgeUtil = excelForJudgeUtil;
-        this.whiteListUtil = whiteListUtil;
-        this.whiteListMapper = whiteListMapper;
     }
 
     /**
@@ -74,23 +66,9 @@ public class AdminController {
      */
     @OperateLog(value = "管理端设置/修改参赛白名单")
     @PostMapping("/com/whitelist")
+    @Transactional
     public String SetWhiteList(@RequestParam Long comId, @RequestParam Boolean isWhiteList, MultipartFile file) {
-        whiteListUtil.setComId(comId);
-        whiteListUtil.setIsWhiteList(isWhiteList);
-        // 如果不设置白名单，则删除已设置的白名单
-        if (!isWhiteList) {
-            QueryWrapper<WhiteList> whiteListQueryWrapper = new QueryWrapper<>();
-            whiteListQueryWrapper.eq("com_id", comId);
-            if (whiteListMapper.exists(whiteListQueryWrapper)) {
-                whiteListMapper.delete(whiteListQueryWrapper);
-            }
-            return "success";
-        }
-        try {
-            EasyExcel.read(file.getInputStream(), whiteListUtil).sheet().headRowNumber(0).doRead();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        adminService.setWhiteList(comId, isWhiteList, file);
         return "success";
     }
 
@@ -229,13 +207,76 @@ public class AdminController {
      */
     @OperateLog(value = "分配评委")
     @PostMapping("/judge/assign")
+    @Transactional
     public String distributeJudges(MultipartFile file) {
-        try {
-            EasyExcel.read(file.getInputStream(), excelForJudgeUtil).sheet().doRead();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        adminService.importJudgeAssign(file);
         return "success";
+    }
+
+    /**
+     * 获取评委账号列表
+     *
+     * @param pageNum  当前页数
+     * @param pageSize 每页大小
+     * @return 评委账号列表
+     */
+    @OperateLog(value = "管理端获取评委账号列表")
+    @GetMapping("/judge/list")
+    public Map<String, Object> getJudgeAccountList(@RequestParam(defaultValue = "1") Integer pageNum, @RequestParam(defaultValue = "10") Integer pageSize) {
+        return adminService.getJudgeAccountList(pageNum, pageSize);
+    }
+
+    /**
+     * 新增单个评委账号
+     *
+     * @param request 学号/姓名/联系方式/初始密码
+     * @return 执行结果
+     */
+    @OperateLog(value = "管理端新增评委账号")
+    @PostMapping("/judge/create")
+    public GlobalResponse<String> createJudgeAccount(@RequestBody JudgeAccountRequest request) {
+        adminService.createJudgeAccount(request);
+        return GlobalResponse.success();
+    }
+
+    /**
+     * 编辑评委账号（学号不可改，密码留空表示不重置）
+     *
+     * @param request 学号/姓名/联系方式/新密码
+     * @return 执行结果
+     */
+    @OperateLog(value = "管理端编辑评委账号")
+    @PostMapping("/judge/edit")
+    public GlobalResponse<String> editJudgeAccount(@RequestBody JudgeAccountRequest request) {
+        adminService.editJudgeAccount(request);
+        return GlobalResponse.success();
+    }
+
+    /**
+     * 删除评委账号
+     *
+     * @param request 学号
+     * @return 执行结果
+     */
+    @OperateLog(value = "管理端删除评委账号")
+    @PostMapping("/judge/delete")
+    public GlobalResponse<String> deleteJudgeAccount(@RequestBody JudgeAccountRequest request) {
+        adminService.deleteJudgeAccount(request.getCode());
+        return GlobalResponse.success();
+    }
+
+    /**
+     * 通过导入excel批量创建评委账号，返回账号及初始密码
+     *
+     * @param file  评委账号excel（学号/姓名/联系方式）
+     * @param depId 部门id，评委账号不挂靠具体学院，默认固定为1
+     * @return 账号及初始密码列表
+     */
+    @OperateLog(value = "管理端导入评委账号")
+    @PostMapping("/judge/import")
+    @Transactional
+    public List<Map<String, String>> importJudgeAccount(@RequestParam("file") MultipartFile file, @RequestParam(defaultValue = "1") Integer depId) {
+        return adminService.importJudgeAccount(file, depId);
     }
 
     /**

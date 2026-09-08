@@ -1,23 +1,17 @@
 package com.sast.crs.service.impl;
 
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.context.AnalysisContext;
-import com.alibaba.excel.read.listener.ReadListener;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.sast.crs.entity.User;
 import com.sast.crs.entity.UserInfo;
-import com.sast.crs.exception.LocalRuntimeException;
+import com.sast.crs.enums.UserRoleEnum;
 import com.sast.crs.mapper.ReviewMapper;
-import com.sast.crs.mapper.UserMapper;
 import com.sast.crs.model.*;
 import com.sast.crs.service.ReviewService;
-import com.sast.crs.util.CommonUtil;
+import com.sast.crs.util.AccountImportUtil;
 import com.sast.crs.util.FileUtil;
-import com.sast.crs.util.SecureUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -34,7 +28,7 @@ public class ReviewServiceImpl implements ReviewService {
     @Autowired
     private ReviewMapper reviewMapper;
     @Autowired
-    private UserMapper userMapper;
+    private AccountImportUtil accountImportUtil;
 
 
     @Override
@@ -164,46 +158,6 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public List<Map<String, String>> importStudent(MultipartFile file, Integer depId, HttpServletResponse response) throws IOException {
-
-        HashMap<String, String> userPasswordMap = new HashMap<>();
-        List<User> userList = new ArrayList<>();
-        if (file.isEmpty()) {
-            throw new LocalRuntimeException("文件为空");
-        }
-
-        EasyExcel.read(file.getInputStream(), User.class, new ReadListener<User>() {
-            @Override
-            public void invoke(User user, AnalysisContext analysisContext) {
-                userList.add(user);
-            }
-
-            @Override
-            public void doAfterAllAnalysed(AnalysisContext analysisContext) {
-                userList.forEach(user -> {
-                    user.setDepId(depId);
-                    user.setRole(0);
-                    var originPass = user.getCode() + CommonUtil.genetateRandomString(6, "abcdefghjkmnpqstwxyz");
-                    userPasswordMap.put(user.getCode(), originPass);
-                    user.setPassword(SecureUtil.encryptMD5(originPass));
-                    try {
-                        userMapper.insert(user);
-                    } catch (Exception e) {
-                        userList.clear();
-                        throw new LocalRuntimeException("学号为" + user.getCode() + "的学生已存在，不可重复导入");
-                    }
-                });
-            }
-        }).sheet().doRead();
-        var list = new ArrayList<Map<String, String>>();
-
-        userList.forEach(user -> {
-            var map = new HashMap<String, String>();
-            map.put("code", user.getCode());
-            map.put("password", userPasswordMap.get(user.getCode()));
-            list.add(map);
-        });
-        userList.clear();
-        return list;
-
+        return accountImportUtil.importAccounts(file, depId, UserRoleEnum.COMMON_STUDENT.getRole(), "学生");
     }
 }

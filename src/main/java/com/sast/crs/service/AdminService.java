@@ -3,10 +3,12 @@ package com.sast.crs.service;
 import com.alibaba.fastjson2.JSONObject;
 import com.sast.crs.entity.Competition;
 import com.sast.crs.entity.User;
+import com.sast.crs.model.JudgeAccountRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 public interface AdminService {
@@ -28,4 +30,18 @@ public interface AdminService {
     Map<String, Object> getComMangerInfo(Integer pageNum, Integer pageSize, Long comId);
 
     JSONObject getSchema(Long comId);
+
+    Map<String, Object> getJudgeAccountList(Integer pageNum, Integer pageSize);
+
+    void createJudgeAccount(JudgeAccountRequest request);
+
+    void editJudgeAccount(JudgeAccountRequest request);
+
+    void deleteJudgeAccount(String code);
+
+    List<Map<String, String>> importJudgeAccount(MultipartFile file, Integer depId);
+
+    void importJudgeAssign(MultipartFile file);
+
+    void setWhiteList(Long comId, Boolean isWhiteList, MultipartFile file);
 }

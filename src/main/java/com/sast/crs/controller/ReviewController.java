@@ -97,7 +97,7 @@ public class ReviewController {
     @OperateLog("导入学生账号并导出excel")
     @PostMapping("/import")
     @Transactional
-    public List<Map<String, String>> importStudent(@RequestBody MultipartFile file, HttpServletResponse response) throws IOException {
+    public List<Map<String, String>> importStudent(@RequestParam("file") MultipartFile file, HttpServletResponse response) throws IOException {
         User user = UserInterceptor.userHolder.get();
         return reviewService.importStudent(file, user.getDepId(), response);
     }
