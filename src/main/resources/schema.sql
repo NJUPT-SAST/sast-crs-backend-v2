@@ -98,7 +98,8 @@ CREATE TABLE `score` (
   `com_id` int(11) NOT NULL,
   `score` int(11) NOT NULL,
   `opinion` text NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_score_review` (`judge_code`, `user_code`, `com_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `notice` (

@@ -112,9 +112,6 @@ public class ScoreServiceImpl implements ScoreService {
         String userCode = scoreMapper.getUserCode(proId);
         //处理提交相关字段
         if (userCode != null && comId != null) {
-            if (scoreMapper.isExistence(comId, userCode, teacherCode)) {
-                return scoreMapper.updateScore(comId, teacherCode, userCode, score, opinion) > 0;
-            }
             return scoreMapper.upload(teacherCode, userCode, comId, score, opinion) > 0;
         }
         return false;
