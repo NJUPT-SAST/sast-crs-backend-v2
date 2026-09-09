@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface ReviewService {
-    PageInfo<ComListForReview> getCompetitionList(Integer page, String code, Integer depId);
+    PageInfo<ComListForReview> getCompetitionList(Integer page, String code);
 
     PageInfo<ProgramListForReview> getProgramList(String code, Integer comId, Integer pageNum);
 

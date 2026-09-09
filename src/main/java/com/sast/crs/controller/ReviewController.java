@@ -40,7 +40,7 @@ public class ReviewController {
     public Object GetCompetitionList(@RequestParam(defaultValue = "1") Integer page) {
         User user = UserInterceptor.userHolder.get();
         //交由service处理
-        PageInfo<ComListForReview> result = reviewService.getCompetitionList(page, user.getCode(), user.getDepId());
+        PageInfo<ComListForReview> result = reviewService.getCompetitionList(page, user.getCode());
         if (result.getTotal().equals(0)) {
             return GlobalResponse.failure(ErrorEnum.NO_RESULT);
         }

@@ -32,16 +32,54 @@ public class ReviewServiceImpl implements ReviewService {
 
 
     @Override
-    public PageInfo<ComListForReview> getCompetitionList(Integer pageNum, String code, Integer depId) {
+    public PageInfo<ComListForReview> getCompetitionList(Integer pageNum, String code) {
         //使用MybatisPlus插件进行分页操作
         Page<ComListForReview> page = new Page<>(pageNum, 10);
-        IPage<ComListForReview> pages = reviewMapper.getComInfo(page, code, depId);
+        IPage<ComListForReview> pages = reviewMapper.getComInfo(page, code);
+        // 总数/已审核数按与作品列表一致的口径统计：review_settings 中映射给该审核人的学院
+        List<ComListForReview> list = pages.getRecords();
+        for (ComListForReview record : list) {
+            JSONObject settings = reviewMapper.confirm(record.getId()).getJSONObject("review_settings");
+            if (settings == null) {
+                record.setTotalNum(0);
+                record.setCompletedNum(0);
+                continue;
+            }
+            String setting = settings.getString("0");
+            List<Integer> depIds = new ArrayList<>();
+            if (setting != null && Objects.equals(setting, code)) {
+                // 总审核人：统计未分配给其他审核人的学院
+                for (String key : settings.keySet()) {
+                    if (!settings.getString(key).equals(code) & !key.equals("0")) {
+                        depIds.add(Integer.parseInt(key));
+                    }
+                }
+                if (depIds.isEmpty()) {
+                    // 没有排除任何学院，用哨兵值使 NOT IN 命中全部作品
+                    depIds.add(-1);
+                }
+                record.setTotalNum(reviewMapper.getScopeTotalNotIn(depIds, record.getId()));
+                record.setCompletedNum(reviewMapper.getScopeDoneNotIn(depIds, record.getId()));
+            } else {
+                // 普通审核人：统计映射给自己的学院
+                for (String key : settings.keySet()) {
+                    if (settings.getString(key).equals(code)) {
+                        depIds.add(Integer.parseInt(key));
+                    }
+                }
+                if (depIds.isEmpty()) {
+                    // 没有映射到自己的学院，用哨兵值使 IN 恒不命中
+                    depIds.add(-1);
+                }
+                record.setTotalNum(reviewMapper.getScopeTotal(depIds, record.getId()));
+                record.setCompletedNum(reviewMapper.getScopeDone(depIds, record.getId()));
+            }
+        }
         //重新包装
         Integer total = Math.toIntExact(pages.getTotal());
         Integer current = Math.toIntExact(pages.getCurrent());
         Integer pageSize = Math.toIntExact(pages.getSize());
         Integer pageTotal = Math.toIntExact(pages.getPages());
-        List<ComListForReview> list = pages.getRecords();
         //返回结果
         return new PageInfo<>(total, list, current, pageSize, pageTotal);
     }
