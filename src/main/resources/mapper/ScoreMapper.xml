@@ -77,6 +77,9 @@
     <insert id="upload">
         INSERT INTO score (judge_code, user_code, com_id, score, opinion)
         VALUES (#{jCode}, #{uCode}, #{comId}, #{score}, #{opinion})
+        ON DUPLICATE KEY UPDATE
+            score = VALUES(score),
+            opinion = VALUES(opinion)
     </insert>
 
     <!--通过评审id获取用户code-->

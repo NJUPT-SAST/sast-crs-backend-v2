@@ -52,7 +52,8 @@ CREATE TABLE `team` (
   `captain` varchar(255) NOT NULL,
   `member` text NULL,
   `teacher` text NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_team_com_captain` (`com_id`, `captain`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `work` (
@@ -61,7 +62,8 @@ CREATE TABLE `work` (
   `user_code` varchar(255) NOT NULL,
   `work_name` varchar(255) NULL,
   `schema_content` text NOT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_work_com_user` (`com_id`, `user_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `file` (
@@ -70,7 +72,8 @@ CREATE TABLE `file` (
   `user_code` varchar(255) NULL,
   `input` varchar(255) NULL,
   `url` varchar(255) NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_file_work_input` (`com_id`, `user_code`, `input`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `judge` (
@@ -98,7 +101,8 @@ CREATE TABLE `score` (
   `com_id` int(11) NOT NULL,
   `score` int(11) NOT NULL,
   `opinion` text NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_score_review` (`judge_code`, `user_code`, `com_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `notice` (

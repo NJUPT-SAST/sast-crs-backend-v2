@@ -221,6 +221,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void uploadComSchema(User user, Long comId, String jsonData) {
         Competition competition = getCompetition(comId);
         if (competition.getSubmitEndTime().isBefore(LocalDateTime.now())) {
@@ -269,7 +270,7 @@ public class UserServiceImpl implements UserService {
                         throw new LocalRuntimeException(ErrorEnum.FILE_EXPIRED_ERROR);
                     FileCache cache = JSON.parseObject((String) redisUtil.get(key), FileCache.class);
                     File newFile = cache.toFile();
-                    fileMapper.insert(newFile);
+                    fileMapper.upsertFile(newFile);
                     fileDBMap.put(title, newFile);
                 } else if (!fileDB.getUrl().equalsIgnoreCase(content)) {
                     if (!redisUtil.hasKey(key))
@@ -277,7 +278,7 @@ public class UserServiceImpl implements UserService {
                     cosUtil.deleteFile(fileDB.getUrl(), COSUtil.Folder.PRIVATE);
                     FileCache cache = JSON.parseObject((String) redisUtil.get(key), FileCache.class);
                     fileDB.setUrl(cache.getUrl());
-                    fileMapper.updateById(fileDB);
+                    fileMapper.upsertFile(fileDB);
                     fileDBMap.put(title, fileDB);
                 }
                 redisUtil.del(key);
@@ -289,7 +290,7 @@ public class UserServiceImpl implements UserService {
         if (workDB != null) {
             workDB.setWorkName(workName);
             workDB.setSchemaContent(JSON.toJSONString(workSchemas));
-            workMapper.updateById(workDB);
+            workMapper.upsertWork(workDB);
 
             // 修改作品信息后重置审核状态
             Review review = reviewMapper.selectOne(new LambdaQueryWrapper<Review>().eq(Review::getComId, competition.getId()).eq(Review::getUserCode, user.getCode()));
@@ -307,7 +308,7 @@ public class UserServiceImpl implements UserService {
             work.setUserCode(user.getCode());
             work.setWorkName(workName);
             work.setSchemaContent(JSON.toJSONString(workSchemas));
-            workMapper.insert(work);
+            workMapper.upsertWork(work);
 
             // 创建审核关系
             Review review = new Review();
@@ -442,8 +443,7 @@ public class UserServiceImpl implements UserService {
         team.setCaptain(user.getCode());
         team.setMember(JSON.toJSONString(teamListMembers));
         team.setTeacher(JSON.toJSONString(teacherListMembers));
-        if (isUpdate) teamMapper.updateById(team);
-        else teamMapper.insert(team);
+        teamMapper.upsertTeam(team);
     }
 
     private int getCompetitionStatus(@NotNull Competition competition) {
