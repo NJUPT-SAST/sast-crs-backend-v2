@@ -5,8 +5,11 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.sast.crs.entity.Competition;
 import com.sast.crs.entity.UserInfo;
 import com.sast.crs.enums.UserRoleEnum;
+import com.sast.crs.exception.LocalRuntimeException;
+import com.sast.crs.mapper.CompetitionMapper;
 import com.sast.crs.mapper.ReviewMapper;
 import com.sast.crs.model.*;
 import com.sast.crs.service.ReviewService;
@@ -19,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Slf4j
@@ -27,6 +31,8 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Autowired
     private ReviewMapper reviewMapper;
+    @Autowired
+    private CompetitionMapper competitionMapper;
     @Autowired
     private AccountImportUtil accountImportUtil;
 
@@ -163,6 +169,19 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public Boolean updateReview(String code, Integer id, Boolean accept, String opinion) {
+        // 校验是否处于评审时间窗内
+        Integer comId = reviewMapper.getComIdByProId(id);
+        Competition competition = competitionMapper.selectById(comId);
+        if (competition == null) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(competition.getReviewBeginTime())) {
+            throw new LocalRuntimeException("评审尚未开始");
+        }
+        if (now.isAfter(competition.getReviewEndTime())) {
+            throw new LocalRuntimeException("评审已截止");
+        }
         return reviewMapper.updateReview(code, id, accept, opinion) > 0;
     }
 
