@@ -14,7 +14,7 @@ import com.sast.crs.exception.LocalRuntimeException;
 import com.sast.crs.mapper.*;
 import com.sast.crs.model.*;
 import com.sast.crs.service.ScoreService;
-import com.sast.crs.util.FileUtil;
+import com.sast.crs.util.COSUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
@@ -24,6 +24,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
@@ -34,6 +35,9 @@ public class ScoreServiceImpl implements ScoreService {
 
     @Autowired
     private ReviewMapper reviewMapper;
+
+    @Autowired
+    private CompetitionMapper competitionMapper;
 
     @Override
     public PageInfo<ComListForScore> getCompetitionList(String code, Integer pageNum) {
@@ -97,7 +101,7 @@ public class ScoreServiceImpl implements ScoreService {
         List<Accessories> accessories = new ArrayList<>();
         for (Object url : urls) {
             String sUrl = url.toString();
-            accessories.add(new Accessories(FileUtil.getOriginalFilename(sUrl), sUrl));
+            accessories.add(new Accessories(COSUtil.getOriginalFilename(sUrl), sUrl));
         }
         //获取队伍名
         String teamName = reviewMapper.getTeamName(comId, captainId);
@@ -112,12 +116,29 @@ public class ScoreServiceImpl implements ScoreService {
         String userCode = scoreMapper.getUserCode(proId);
         //处理提交相关字段
         if (userCode != null && comId != null) {
-            if (scoreMapper.isExistence(comId, userCode, teacherCode)) {
-                return scoreMapper.updateScore(comId, teacherCode, userCode, score, opinion) > 0;
-            }
+            checkReviewTime(comId);
             return scoreMapper.upload(teacherCode, userCode, comId, score, opinion) > 0;
         }
         return false;
+    }
+
+    /**
+     * 校验是否处于评审时间窗内，超出则拒绝评分
+     *
+     * @param comId 比赛id
+     */
+    private void checkReviewTime(Integer comId) {
+        Competition competition = competitionMapper.selectById(comId);
+        if (competition == null) {
+            throw new LocalRuntimeException(ErrorEnum.UNKNOWN_COMPETITION_ID);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(competition.getReviewBeginTime())) {
+            throw new LocalRuntimeException("评审尚未开始");
+        }
+        if (now.isAfter(competition.getReviewEndTime())) {
+            throw new LocalRuntimeException("评审已截止");
+        }
     }
 
     @Override

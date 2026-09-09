@@ -67,8 +67,8 @@
                             GROUP BY com_id) w ON w.com_id = c.id
                  LEFT JOIN (SELECT com_id, COUNT(*) AS revNum
                             FROM review
-                            WHERE review_code IS NOT NULL
-                              AND review_code &lt;&gt; ''
+                            WHERE accept IS NOT NULL
+                              AND opinion IS NOT NULL
                             GROUP BY com_id) r ON r.com_id = c.id
         ORDER BY c.id
             DESC

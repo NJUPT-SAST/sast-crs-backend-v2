@@ -1,23 +1,20 @@
 package com.sast.crs.service.impl;
 
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.context.AnalysisContext;
-import com.alibaba.excel.read.listener.ReadListener;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.sast.crs.entity.User;
+import com.sast.crs.entity.Competition;
 import com.sast.crs.entity.UserInfo;
+import com.sast.crs.enums.UserRoleEnum;
 import com.sast.crs.exception.LocalRuntimeException;
+import com.sast.crs.mapper.CompetitionMapper;
 import com.sast.crs.mapper.ReviewMapper;
-import com.sast.crs.mapper.UserMapper;
 import com.sast.crs.model.*;
 import com.sast.crs.service.ReviewService;
-import com.sast.crs.util.CommonUtil;
-import com.sast.crs.util.FileUtil;
-import com.sast.crs.util.SecureUtil;
+import com.sast.crs.util.AccountImportUtil;
+import com.sast.crs.util.COSUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Slf4j
@@ -34,20 +32,60 @@ public class ReviewServiceImpl implements ReviewService {
     @Autowired
     private ReviewMapper reviewMapper;
     @Autowired
-    private UserMapper userMapper;
+    private CompetitionMapper competitionMapper;
+    @Autowired
+    private AccountImportUtil accountImportUtil;
 
 
     @Override
-    public PageInfo<ComListForReview> getCompetitionList(Integer pageNum, String code, Integer depId) {
+    public PageInfo<ComListForReview> getCompetitionList(Integer pageNum, String code) {
         //使用MybatisPlus插件进行分页操作
         Page<ComListForReview> page = new Page<>(pageNum, 10);
-        IPage<ComListForReview> pages = reviewMapper.getComInfo(page, code, depId);
+        IPage<ComListForReview> pages = reviewMapper.getComInfo(page, code);
+        // 总数/已审核数按与作品列表一致的口径统计：review_settings 中映射给该审核人的学院
+        List<ComListForReview> list = pages.getRecords();
+        for (ComListForReview record : list) {
+            JSONObject settings = reviewMapper.confirm(record.getId()).getJSONObject("review_settings");
+            if (settings == null) {
+                record.setTotalNum(0);
+                record.setCompletedNum(0);
+                continue;
+            }
+            String setting = settings.getString("0");
+            List<Integer> depIds = new ArrayList<>();
+            if (setting != null && Objects.equals(setting, code)) {
+                // 总审核人：统计未分配给其他审核人的学院
+                for (String key : settings.keySet()) {
+                    if (!settings.getString(key).equals(code) & !key.equals("0")) {
+                        depIds.add(Integer.parseInt(key));
+                    }
+                }
+                if (depIds.isEmpty()) {
+                    // 没有排除任何学院，用哨兵值使 NOT IN 命中全部作品
+                    depIds.add(-1);
+                }
+                record.setTotalNum(reviewMapper.getScopeTotalNotIn(depIds, record.getId()));
+                record.setCompletedNum(reviewMapper.getScopeDoneNotIn(depIds, record.getId()));
+            } else {
+                // 普通审核人：统计映射给自己的学院
+                for (String key : settings.keySet()) {
+                    if (settings.getString(key).equals(code)) {
+                        depIds.add(Integer.parseInt(key));
+                    }
+                }
+                if (depIds.isEmpty()) {
+                    // 没有映射到自己的学院，用哨兵值使 IN 恒不命中
+                    depIds.add(-1);
+                }
+                record.setTotalNum(reviewMapper.getScopeTotal(depIds, record.getId()));
+                record.setCompletedNum(reviewMapper.getScopeDone(depIds, record.getId()));
+            }
+        }
         //重新包装
         Integer total = Math.toIntExact(pages.getTotal());
         Integer current = Math.toIntExact(pages.getCurrent());
         Integer pageSize = Math.toIntExact(pages.getSize());
         Integer pageTotal = Math.toIntExact(pages.getPages());
-        List<ComListForReview> list = pages.getRecords();
         //返回结果
         return new PageInfo<>(total, list, current, pageSize, pageTotal);
     }
@@ -115,7 +153,7 @@ public class ReviewServiceImpl implements ReviewService {
         if (urls != null) {
             for (Object url : urls) {
                 String sUrl = url.toString();
-                accessories.add(new Accessories(FileUtil.getOriginalFilename(sUrl), sUrl));
+                accessories.add(new Accessories(COSUtil.getOriginalFilename(sUrl), sUrl));
             }
         }
         String teamName = reviewMapper.getTeamName(comId, captainId);
@@ -131,6 +169,19 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public Boolean updateReview(String code, Integer id, Boolean accept, String opinion) {
+        // 校验是否处于评审时间窗内
+        Integer comId = reviewMapper.getComIdByProId(id);
+        Competition competition = competitionMapper.selectById(comId);
+        if (competition == null) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(competition.getReviewBeginTime())) {
+            throw new LocalRuntimeException("评审尚未开始");
+        }
+        if (now.isAfter(competition.getReviewEndTime())) {
+            throw new LocalRuntimeException("评审已截止");
+        }
         return reviewMapper.updateReview(code, id, accept, opinion) > 0;
     }
 
@@ -164,46 +215,6 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public List<Map<String, String>> importStudent(MultipartFile file, Integer depId, HttpServletResponse response) throws IOException {
-
-        HashMap<String, String> userPasswordMap = new HashMap<>();
-        List<User> userList = new ArrayList<>();
-        if (file.isEmpty()) {
-            throw new LocalRuntimeException("文件为空");
-        }
-
-        EasyExcel.read(file.getInputStream(), User.class, new ReadListener<User>() {
-            @Override
-            public void invoke(User user, AnalysisContext analysisContext) {
-                userList.add(user);
-            }
-
-            @Override
-            public void doAfterAllAnalysed(AnalysisContext analysisContext) {
-                userList.forEach(user -> {
-                    user.setDepId(depId);
-                    user.setRole(0);
-                    var originPass = user.getCode() + CommonUtil.genetateRandomString(6, "abcdefghjkmnpqstwxyz");
-                    userPasswordMap.put(user.getCode(), originPass);
-                    user.setPassword(SecureUtil.encryptMD5(originPass));
-                    try {
-                        userMapper.insert(user);
-                    } catch (Exception e) {
-                        userList.clear();
-                        throw new LocalRuntimeException("学号为" + user.getCode() + "的学生已存在，不可重复导入");
-                    }
-                });
-            }
-        }).sheet().doRead();
-        var list = new ArrayList<Map<String, String>>();
-
-        userList.forEach(user -> {
-            var map = new HashMap<String, String>();
-            map.put("code", user.getCode());
-            map.put("password", userPasswordMap.get(user.getCode()));
-            list.add(map);
-        });
-        userList.clear();
-        return list;
-
+        return accountImportUtil.importAccounts(file, depId, UserRoleEnum.COMMON_STUDENT.getRole(), "学生");
     }
 }

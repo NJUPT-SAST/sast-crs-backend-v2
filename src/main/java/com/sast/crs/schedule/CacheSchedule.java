@@ -3,7 +3,7 @@ package com.sast.crs.schedule;
 import com.alibaba.fastjson2.JSON;
 import com.sast.crs.constant.RedisKeyConst;
 import com.sast.crs.model.FileCache;
-import com.sast.crs.util.FileUtil;
+import com.sast.crs.util.COSUtil;
 import com.sast.crs.util.RedisUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,12 +17,12 @@ import java.util.Set;
 @Slf4j
 @Component
 public class CacheSchedule {
-    private FileUtil fileUtil;
+    private COSUtil cosUtil;
     private RedisUtil redisUtil;
 
     @Autowired
-    public void setFileUtil(FileUtil fileUtil) {
-        this.fileUtil = fileUtil;
+    public void setCosUtil(COSUtil cosUtil) {
+        this.cosUtil = cosUtil;
     }
 
     @Autowired
@@ -42,7 +42,7 @@ public class CacheSchedule {
             FileCache cache = JSON.parseObject((String) redisUtil.getOriginal(key), FileCache.class);
             Duration duration = Duration.between(cache.getDate(), LocalDateTime.now());
             if (duration.toHours() > 24) {
-                fileUtil.deleteFile(cache.getUrl(), FileUtil.PRIVATE_BUCKET);
+                cosUtil.deleteFile(cache.getUrl(), COSUtil.Folder.PRIVATE);
                 redisUtil.deleteOriginal(key);
                 log.info("上传的文件缓存已删除，Key：{}", key);
             }

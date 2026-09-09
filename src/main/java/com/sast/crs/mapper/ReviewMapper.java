@@ -14,7 +14,15 @@ import java.util.List;
 
 @Repository
 public interface ReviewMapper extends BaseMapper<Review> {
-    IPage<ComListForReview> getComInfo(Page<ComListForReview> page, @Param("code") String code, @Param("dep_id") Integer depId);
+    IPage<ComListForReview> getComInfo(Page<ComListForReview> page, @Param("code") String code);
+
+    Integer getScopeTotal(@Param("depIds") List<Integer> depIds, @Param("comId") Integer comId);
+
+    Integer getScopeTotalNotIn(@Param("depIds") List<Integer> depIds, @Param("comId") Integer comId);
+
+    Integer getScopeDone(@Param("depIds") List<Integer> depIds, @Param("comId") Integer comId);
+
+    Integer getScopeDoneNotIn(@Param("depIds") List<Integer> depIds, @Param("comId") Integer comId);
 
     JSONObject confirm(@Param("comId") Integer comId);
 
@@ -31,6 +39,8 @@ public interface ReviewMapper extends BaseMapper<Review> {
     String getCaptainIdByProId(Integer proId);
 
     Integer updateReview(@Param("code") String code, @Param("id") Integer id, @Param("accept") Boolean accept, @Param("opinion") String opinion);
+
+    void upsertReview(Review review);
 
     Integer getReviewCount();
 

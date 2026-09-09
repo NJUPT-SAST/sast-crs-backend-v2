@@ -18,7 +18,7 @@ import com.sast.crs.mapper.*;
 import com.sast.crs.model.WorkForExcel;
 import com.sast.crs.model.WorkOutput;
 import com.sast.crs.service.FileService;
-import com.sast.crs.util.FileUtil;
+import com.sast.crs.util.COSUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
@@ -36,13 +36,13 @@ import java.util.Map;
 @Slf4j
 @Service
 public class FileServiceImpl implements FileService {
-    private final FileUtil fileUtil;
+    private final COSUtil cosUtil;
     private final FileMapper fileMapper;
     private final WorkMapper workMapper;
     private final AdminMapper adminMapper;
 
-    public FileServiceImpl(FileUtil fileUtil, FileMapper fileMapper, WorkMapper workMapper, AdminMapper adminMapper) {
-        this.fileUtil = fileUtil;
+    public FileServiceImpl(COSUtil cosUtil, FileMapper fileMapper, WorkMapper workMapper, AdminMapper adminMapper) {
+        this.cosUtil = cosUtil;
         this.fileMapper = fileMapper;
         this.workMapper = workMapper;
         this.adminMapper = adminMapper;
@@ -227,6 +227,6 @@ public class FileServiceImpl implements FileService {
             log.warn("用户无权限下载文件，URL： {} ", url);
             throw new LocalRuntimeException(ErrorEnum.FILE_NOT_EXIST);
         }
-        return fileUtil.getDownloadCertificate(url);
+        return cosUtil.getDownloadCertificate(url);
     }
 }
