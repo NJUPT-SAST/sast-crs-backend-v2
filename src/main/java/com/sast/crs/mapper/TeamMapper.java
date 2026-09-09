@@ -8,5 +8,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface TeamMapper extends BaseMapper<Team> {
+    int upsertTeam(Team team);
+
     TeamInfoWithCom selectTeamInfoWithCom(@Param("comId") Long comId, @Param("captainCode") String captainCode);
 }

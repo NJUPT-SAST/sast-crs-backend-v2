@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface FileMapper extends BaseMapper<File> {
+    int upsertFile(File file);
 }
