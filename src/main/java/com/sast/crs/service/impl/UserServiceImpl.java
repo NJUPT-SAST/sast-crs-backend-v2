@@ -4,7 +4,6 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -291,17 +290,6 @@ public class UserServiceImpl implements UserService {
             workDB.setWorkName(workName);
             workDB.setSchemaContent(JSON.toJSONString(workSchemas));
             workMapper.upsertWork(workDB);
-
-            // 修改作品信息后重置审核状态
-            Review review = reviewMapper.selectOne(new LambdaQueryWrapper<Review>().eq(Review::getComId, competition.getId()).eq(Review::getUserCode, user.getCode()));
-            if (review == null) {
-                review = new Review();
-                review.setComId(competition.getId());
-                review.setUserCode(user.getCode());
-                reviewMapper.insert(review);
-            } else {
-                reviewMapper.update(null, new LambdaUpdateWrapper<Review>().eq(Review::getComId, competition.getId()).eq(Review::getUserCode, user.getCode()).set(Review::getAccept, null).set(Review::getOpinion, null));
-            }
         } else {
             Work work = new Work();
             work.setComId(competition.getId());
@@ -309,13 +297,12 @@ public class UserServiceImpl implements UserService {
             work.setWorkName(workName);
             work.setSchemaContent(JSON.toJSONString(workSchemas));
             workMapper.upsertWork(work);
-
-            // 创建审核关系
-            Review review = new Review();
-            review.setComId(competition.getId());
-            review.setUserCode(user.getCode());
-            reviewMapper.insert(review);
         }
+        // 创建审核关系，已存在则重置审核状态（修改作品后需重新审核，依赖 uk_review_com_user 唯一键）
+        Review review = new Review();
+        review.setComId(competition.getId());
+        review.setUserCode(user.getCode());
+        reviewMapper.upsertReview(review);
     }
 
     @Override

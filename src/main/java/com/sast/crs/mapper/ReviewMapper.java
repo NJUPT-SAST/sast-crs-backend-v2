@@ -32,6 +32,8 @@ public interface ReviewMapper extends BaseMapper<Review> {
 
     Integer updateReview(@Param("code") String code, @Param("id") Integer id, @Param("accept") Boolean accept, @Param("opinion") String opinion);
 
+    void upsertReview(Review review);
+
     Integer getReviewCount();
 
     Integer getComCount();

@@ -81,7 +81,8 @@ CREATE TABLE `judge` (
   `com_id` int(11) NULL,
   `judge_code` varchar(255) NULL,
   `user_code` varchar(255) NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_judge_assign` (`com_id`, `judge_code`, `user_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `review` (
@@ -91,7 +92,8 @@ CREATE TABLE `review` (
   `user_code` varchar(255) NULL,
   `accept` tinyint(4) NULL,
   `opinion` text NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_review_com_user` (`com_id`, `user_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `score` (
