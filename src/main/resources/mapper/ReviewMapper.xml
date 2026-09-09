@@ -20,12 +20,14 @@
                    (SELECT COUNT(*)
                     FROM review
                     WHERE review.accept IS NOT NULL
+                  AND review.opinion IS NOT NULL
                       AND review.com_id = competition.id
                       AND review.user_code NOT IN
                           (SELECT user.code FROM user WHERE JSON_CONTAINS(JSON_KEYS(review_settings), CONCAT('$.',user.dep_id))))),
                   (SELECT COUNT(*)
                    FROM review
                    WHERE review.accept IS NOT NULL
+                  AND review.opinion IS NOT NULL
                      AND review.com_id = competition.id
                      AND review.user_code IN
                          (SELECT user.code FROM user WHERE user.dep_id = #{dep_id}))) AS 'completed_num',
@@ -152,8 +154,9 @@
         INSERT INTO review (com_id, user_code)
         VALUES (#{comId}, #{userCode})
         ON DUPLICATE KEY UPDATE
-            accept  = NULL,
-            opinion = NULL
+            review_code = NULL,
+            accept      = NULL,
+            opinion     = NULL
     </insert>
 
     <!--获取需审批总数-->
@@ -167,6 +170,7 @@
         SELECT COUNT(*)
         FROM review
         WHERE accept IS NOT NULL
+          AND opinion IS NOT NULL
     </select>
 
 
@@ -196,7 +200,8 @@
     <select id="getReviewNum" resultType="long">
         SELECT COUNT(*)
         FROM `review`
-        WHERE `review_code` != ''
+        WHERE accept IS NOT NULL
+          AND opinion IS NOT NULL
           AND `com_id` = #{comId}
     </select>
 
