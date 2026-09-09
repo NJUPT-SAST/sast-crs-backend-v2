@@ -17,6 +17,8 @@ import com.sast.crs.model.ComMangerVo;
 import com.sast.crs.model.CompetitionVO;
 import com.sast.crs.model.JudgeAccountRequest;
 import com.sast.crs.model.JudgeAccountVO;
+import com.sast.crs.model.StudentAccountRequest;
+import com.sast.crs.model.StudentAccountVO;
 import com.sast.crs.model.WhiteList;
 import com.sast.crs.service.AdminService;
 import com.sast.crs.util.AccountImportUtil;
@@ -25,6 +27,7 @@ import com.sast.crs.util.SecureUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -47,11 +50,12 @@ public class AdminServiceImpl implements AdminService {
     private final WorkMapper workMapper;
     private final DepartmentMapper departmentMapper;
     private final JudgeMapper judgeMapper;
+    private final ScoreMapper scoreMapper;
     private final WhiteListMapper whiteListMapper;
     private final AccountImportUtil accountImportUtil;
     private final COSUtil cosUtil;
 
-    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper, ReviewMapper reviewMapper, TeamMapper teamMapper, WorkMapper workMapper, DepartmentMapper departmentMapper, JudgeMapper judgeMapper, WhiteListMapper whiteListMapper, AccountImportUtil accountImportUtil, COSUtil cosUtil) {
+    public AdminServiceImpl(AdminMapper adminMapper, UserMapper userMapper, FileMapper fileMapper, ReviewMapper reviewMapper, TeamMapper teamMapper, WorkMapper workMapper, DepartmentMapper departmentMapper, JudgeMapper judgeMapper, ScoreMapper scoreMapper, WhiteListMapper whiteListMapper, AccountImportUtil accountImportUtil, COSUtil cosUtil) {
         this.adminMapper = adminMapper;
         this.userMapper = userMapper;
         this.fileMapper = fileMapper;
@@ -60,6 +64,7 @@ public class AdminServiceImpl implements AdminService {
         this.workMapper = workMapper;
         this.departmentMapper = departmentMapper;
         this.judgeMapper = judgeMapper;
+        this.scoreMapper = scoreMapper;
         this.whiteListMapper = whiteListMapper;
         this.accountImportUtil = accountImportUtil;
         this.cosUtil = cosUtil;
@@ -427,6 +432,95 @@ public class AdminServiceImpl implements AdminService {
         userMapper.deleteById(trimmedCode);
         // 同时清掉该评委的分配记录，避免之后重建同号账号时残留旧的分配关系
         judgeMapper.delete(new QueryWrapper<Judge>().eq("judge_code", trimmedCode));
+    }
+
+    @Override
+    public Map<String, Object> getStudentAccountList(Integer pageNum, Integer pageSize) {
+        Page<User> page = new Page<>(pageNum, pageSize);
+        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        wrapper.eq("role", UserRoleEnum.COMMON_STUDENT.getRole());
+        IPage<User> studentPage = userMapper.selectPage(page, wrapper);
+        List<StudentAccountVO> records = studentPage.getRecords().stream().map(user -> new StudentAccountVO(user.getCode(), user.getName(), user.getExtra() == null ? null : user.getExtra().getContact())).collect(Collectors.toList());
+        return getResultMap(records, studentPage.getTotal(), pageNum, pageSize);
+    }
+
+    @Override
+    public void createStudentAccount(StudentAccountRequest request) {
+        String code = requireText(request.getCode(), "学号不能为空");
+        if (userIsExist(code)) {
+            throw new LocalRuntimeException("该学号已存在，不可重复创建");
+        }
+        String name = requireText(request.getName(), "姓名不能为空");
+        String contact = requireText(request.getContact(), "联系方式不能为空");
+        String password = request.getPassword();
+        if (password == null || password.length() < 6) {
+            throw new LocalRuntimeException("密码至少 6 位");
+        }
+        User user = new User();
+        user.setCode(code);
+        user.setName(name);
+        user.setPassword(SecureUtil.encryptMD5(password));
+        // 单个创建不传学院，沿用旧版导入学生时固定的默认部门
+        user.setDepId(1);
+        user.setRole(UserRoleEnum.COMMON_STUDENT.getRole());
+        UserExtra extra = new UserExtra();
+        extra.setContact(contact);
+        user.setExtra(extra);
+        userMapper.insert(user);
+    }
+
+    @Override
+    public void editStudentAccount(StudentAccountRequest request) {
+        String code = requireText(request.getCode(), "学号不能为空");
+        User user = userMapper.selectById(code);
+        if (user == null) {
+            throw new LocalRuntimeException(USER_NOT_EXIST);
+        }
+        if (!UserRoleEnum.COMMON_STUDENT.getRole().equals(user.getRole())) {
+            throw new LocalRuntimeException("该学号不是学生账号");
+        }
+        String name = requireText(request.getName(), "姓名不能为空");
+        String contact = requireText(request.getContact(), "联系方式不能为空");
+        User update = new User();
+        update.setCode(code);
+        update.setName(name);
+        UserExtra extra = user.getExtra();
+        if (extra == null) {
+            extra = new UserExtra();
+        }
+        extra.setContact(contact);
+        update.setExtra(extra);
+        // 密码留空表示不重置
+        String password = request.getPassword();
+        if (password != null && !password.isEmpty()) {
+            if (password.length() < 6) {
+                throw new LocalRuntimeException("密码至少 6 位");
+            }
+            update.setPassword(SecureUtil.encryptMD5(password));
+        }
+        userMapper.updateById(update);
+    }
+
+    @Override
+    @Transactional
+    public void deleteStudentAccount(String code) {
+        String trimmedCode = requireText(code, "学号不能为空");
+        User user = userMapper.selectById(trimmedCode);
+        if (user == null) {
+            throw new LocalRuntimeException(USER_NOT_EXIST);
+        }
+        if (!UserRoleEnum.COMMON_STUDENT.getRole().equals(user.getRole())) {
+            throw new LocalRuntimeException("该学号不是学生账号");
+        }
+        userMapper.deleteById(trimmedCode);
+        // 级联清理该学生的参赛数据，避免残留孤儿记录
+        teamMapper.delete(new QueryWrapper<Team>().eq("captain", trimmedCode));
+        workMapper.delete(new QueryWrapper<Work>().eq("user_code", trimmedCode));
+        reviewMapper.delete(new QueryWrapper<Review>().eq("user_code", trimmedCode));
+        scoreMapper.delete(new QueryWrapper<Score>().eq("user_code", trimmedCode));
+        fileMapper.delete(new QueryWrapper<File>().eq("user_code", trimmedCode));
+        // 清掉该学生作为参赛者被分配的评委关系
+        judgeMapper.delete(new QueryWrapper<Judge>().eq("user_code", trimmedCode));
     }
 
     @Override

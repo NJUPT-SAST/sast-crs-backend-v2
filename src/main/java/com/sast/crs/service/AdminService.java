@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.sast.crs.entity.Competition;
 import com.sast.crs.entity.User;
 import com.sast.crs.model.JudgeAccountRequest;
+import com.sast.crs.model.StudentAccountRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -38,6 +39,14 @@ public interface AdminService {
     void editJudgeAccount(JudgeAccountRequest request);
 
     void deleteJudgeAccount(String code);
+
+    Map<String, Object> getStudentAccountList(Integer pageNum, Integer pageSize);
+
+    void createStudentAccount(StudentAccountRequest request);
+
+    void editStudentAccount(StudentAccountRequest request);
+
+    void deleteStudentAccount(String code);
 
     List<Map<String, String>> importJudgeAccount(MultipartFile file, Integer depId);
 

@@ -9,6 +9,7 @@ import com.sast.crs.annotation.OperateLog;
 import com.sast.crs.entity.*;
 import com.sast.crs.enums.UserRoleEnum;
 import com.sast.crs.model.JudgeAccountRequest;
+import com.sast.crs.model.StudentAccountRequest;
 import com.sast.crs.model.WorkOutput;
 import com.sast.crs.response.GlobalResponse;
 import com.sast.crs.service.*;
@@ -262,6 +263,58 @@ public class AdminController {
     @PostMapping("/judge/delete")
     public GlobalResponse<String> deleteJudgeAccount(@RequestBody JudgeAccountRequest request) {
         adminService.deleteJudgeAccount(request.getCode());
+        return GlobalResponse.success();
+    }
+
+    /**
+     * 获取学生账号列表
+     *
+     * @param pageNum  当前页数
+     * @param pageSize 每页大小
+     * @return 学生账号列表
+     */
+    @OperateLog(value = "管理端获取学生账号列表")
+    @GetMapping("/student/list")
+    public Map<String, Object> getStudentAccountList(@RequestParam(defaultValue = "1") Integer pageNum, @RequestParam(defaultValue = "10") Integer pageSize) {
+        return adminService.getStudentAccountList(pageNum, pageSize);
+    }
+
+    /**
+     * 新增单个学生账号
+     *
+     * @param request 学号/姓名/联系方式/初始密码
+     * @return 执行结果
+     */
+    @OperateLog(value = "管理端新增学生账号")
+    @PostMapping("/student/create")
+    public GlobalResponse<String> createStudentAccount(@RequestBody StudentAccountRequest request) {
+        adminService.createStudentAccount(request);
+        return GlobalResponse.success();
+    }
+
+    /**
+     * 编辑学生账号（学号不可改，密码留空表示不重置）
+     *
+     * @param request 学号/姓名/联系方式/新密码
+     * @return 执行结果
+     */
+    @OperateLog(value = "管理端编辑学生账号")
+    @PostMapping("/student/edit")
+    public GlobalResponse<String> editStudentAccount(@RequestBody StudentAccountRequest request) {
+        adminService.editStudentAccount(request);
+        return GlobalResponse.success();
+    }
+
+    /**
+     * 删除学生账号（级联清理其参赛数据）
+     *
+     * @param request 学号
+     * @return 执行结果
+     */
+    @OperateLog(value = "管理端删除学生账号")
+    @PostMapping("/student/delete")
+    public GlobalResponse<String> deleteStudentAccount(@RequestBody StudentAccountRequest request) {
+        adminService.deleteStudentAccount(request.getCode());
         return GlobalResponse.success();
     }
 
