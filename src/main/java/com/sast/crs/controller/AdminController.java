@@ -13,7 +13,6 @@ import com.sast.crs.model.StudentAccountRequest;
 import com.sast.crs.model.WorkOutput;
 import com.sast.crs.response.GlobalResponse;
 import com.sast.crs.service.*;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -67,7 +66,6 @@ public class AdminController {
      */
     @OperateLog(value = "管理端设置/修改参赛白名单")
     @PostMapping("/com/whitelist")
-    @Transactional
     public String SetWhiteList(@RequestParam Long comId, @RequestParam Boolean isWhiteList, MultipartFile file) {
         adminService.setWhiteList(comId, isWhiteList, file);
         return "success";
@@ -208,7 +206,6 @@ public class AdminController {
      */
     @OperateLog(value = "分配评委")
     @PostMapping("/judge/assign")
-    @Transactional
     public String distributeJudges(MultipartFile file) {
         adminService.importJudgeAssign(file);
         return "success";
@@ -327,7 +324,6 @@ public class AdminController {
      */
     @OperateLog(value = "管理端导入评委账号")
     @PostMapping("/judge/import")
-    @Transactional
     public List<Map<String, String>> importJudgeAccount(@RequestParam("file") MultipartFile file, @RequestParam(defaultValue = "1") Integer depId) {
         return adminService.importJudgeAccount(file, depId);
     }

@@ -524,11 +524,13 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     public List<Map<String, String>> importJudgeAccount(MultipartFile file, Integer depId) {
         return accountImportUtil.importAccounts(file, depId, UserRoleEnum.JUDGE.getRole(), "评委");
     }
 
     @Override
+    @Transactional
     public void importJudgeAssign(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new LocalRuntimeException("文件为空");
@@ -602,6 +604,7 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     public void setWhiteList(Long comId, Boolean isWhiteList, MultipartFile file) {
         // 覆盖式导入：先删除已设置的白名单
         whiteListMapper.delete(new QueryWrapper<WhiteList>().eq("com_id", comId));
