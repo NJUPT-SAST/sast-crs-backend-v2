@@ -46,7 +46,7 @@
                c.introduce           AS introduce,
                COALESCE(
                        JSON_UNQUOTE(JSON_EXTRACT(c.review_settings, CONCAT('$."', CAST(u.dep_id AS CHAR), '"'))),
-                       JSON_UNQUOTE(JSON_EXTRACT(c.review_settings, '$.0'))
+                       JSON_UNQUOTE(JSON_EXTRACT(c.review_settings, '$."0"'))
                )                     AS reviewer,
                CASE
                    WHEN NOW() > c.review_end_time THEN '已结束'
