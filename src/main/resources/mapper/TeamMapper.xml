@@ -11,78 +11,29 @@
     </insert>
 
     <resultMap id="TeamInfoWithComMap" type="com.sast.crs.model.TeamInfoWithCom">
-        <result column="com_name" property="comName"/>
         <result column="com_type" property="comType"/>
         <result column="team_name" property="teamName"/>
-        <result column="teachers_json" property="teacherJson" typeHandler="com.baomidou.mybatisplus.extension.handlers.FastjsonTypeHandler"/>
-        <result column="team_members_json" property="teamMembersJson" typeHandler="com.baomidou.mybatisplus.extension.handlers.FastjsonTypeHandler"/>
+        <result column="member" property="member"/>
+        <result column="teacher" property="teacher"/>
     </resultMap>
 
+    <!--
+      只查「我是队长」的那一条队伍记录：team 表有 UNIQUE (com_id, captain)，所以最多一条；
+      member / teacher 是两个 text 列（JSON 文本），这里原样取出，不在 SQL 里展开。
+
+      注意：不要在这里用 JSON_TABLE / JSON_ARRAYAGG。JSON_TABLE 需要 MySQL 8.0.4+，
+      而生产库是 MySQL 5.7，用了会让整个接口 500（SQLSyntaxErrorException: ... near 'JSON_TABLE(...)'）。
+      队员 / 指导老师的展开放在 UserServiceImpl#getTeamInfo 里用 fastjson 完成。
+    -->
     <select id="selectTeamInfoWithCom" resultMap="TeamInfoWithComMap">
         SELECT
-            c.name                                AS com_name,
-            c.type                                AS com_type,
-            t.name                                AS team_name,
-            IFNULL(t.teacher, '[]')               AS teachers_json,
-            JSON_ARRAYAGG(
-                    JSON_OBJECT(
-                            'code', x.code,
-                            'name', x.name,
-                            'college', IFNULL(d.name, ''),
-                            'major', x.major,
-                            'contact', x.contact
-                    )
-            )                                     AS team_members_json
+            c.type AS com_type,
+            t.name AS team_name,
+            t.member AS member,
+            t.teacher AS teacher
         FROM team t
-                 JOIN competition c
-                      ON c.id = t.com_id
-                 JOIN (
-            -- 队长
-            SELECT
-                t1.id                                            AS team_id,
-                u.code                                           AS code,
-                u.name                                           AS name,
-                u.dep_id                                         AS dep_id,
-                JSON_UNQUOTE(JSON_EXTRACT(u.extra, '$.major'))   AS major,
-                JSON_UNQUOTE(JSON_EXTRACT(u.extra, '$.contact')) AS contact,
-                1                                                AS is_captain
-            FROM team t1
-                     JOIN user u ON u.code = t1.captain
-            WHERE t1.com_id = #{comId}
-              AND t1.captain = #{captainCode}
-
-            UNION ALL
-
-            -- 队员（team.member JSON 展开）
-            SELECT
-                t2.id      AS team_id,
-                jt.code    AS code,
-                jt.name    AS name,
-                jt.dep_id  AS dep_id,
-                jt.major   AS major,
-                jt.contact AS contact,
-                0          AS is_captain
-            FROM team t2
-                     JOIN JSON_TABLE(
-                    IFNULL(t2.member, '[]'),
-                    '$[*]' COLUMNS (
-                        code    VARCHAR(64)  PATH '$.code',
-                        name    VARCHAR(255) PATH '$.name',
-                        dep_id  INT          PATH '$.depId',
-                        major   VARCHAR(255) PATH '$.extra.major',
-                        contact VARCHAR(255) PATH '$.extra.contact'
-                        )
-                          ) jt
-            WHERE t2.com_id = #{comId}
-              AND t2.captain = #{captainCode}
-        ) x
-                      ON x.team_id = t.id
-                 LEFT JOIN department d
-                           ON d.id = x.dep_id
+                 JOIN competition c ON c.id = t.com_id
         WHERE t.com_id = #{comId}
           AND t.captain = #{captainCode}
-        GROUP BY
-            c.id, c.name, c.type, c.min_team_members, c.max_team_members,
-            t.name, t.teacher;
     </select>
 </mapper>

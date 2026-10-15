@@ -202,21 +202,71 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public Map<String, Object> getTeamInfo(@NotNull User user, Long comId) {
-        Map<String, Object> data = new HashMap<>();
-        TeamInfoWithCom teamInfoWithCom = teamMapper.selectTeamInfoWithCom(comId, user.getCode());
-        if (teamInfoWithCom == null) {
+        TeamInfoWithCom teamInfo = teamMapper.selectTeamInfoWithCom(comId, user.getCode());
+        if (teamInfo == null) {
+            // 没查到队伍 = 还没报名（前端依赖 2003 这个业务码显示空表单）
             throw new LocalRuntimeException(ErrorEnum.HAVE_NOT_SIGNED_COM);
         }
-        if (Objects.equals(teamInfoWithCom.getComType(), CompetitionTypeEnum.TEAM_COMPETITION)) {
-            data.put("teamName", teamInfoWithCom.getTeamName());
+        Map<String, Object> data = new HashMap<>();
+        if (Objects.equals(teamInfo.getComType(), CompetitionTypeEnum.TEAM_COMPETITION)) {
+            data.put("teamName", teamInfo.getTeamName());
         }
-        // 团队成员
-        List<UserResponse> members = teamInfoWithCom.getTeamMembersJson().toJavaList(UserResponse.class);
+        // 队长排第一位：前端（报名详情页）用 teamMember[0] 当队长
+        List<UserResponse> members = new ArrayList<>();
+        members.add(toUserResponse(user));
+        for (User member : parseUserJson(teamInfo.getMember())) {
+            // 历史数据若把队长也写进了 member，跳过，避免队长出现两次
+            if (user.getCode().equals(member.getCode())) {
+                continue;
+            }
+            members.add(toUserResponse(member));
+        }
         data.put("teamMember", members);
-        // 指导老师
-        List<User> teachers = teamInfoWithCom.getTeacherJson().toJavaList(User.class);
+        // 指导老师只需要姓名与工号；统一用 UserResponse，避免把密码哈希带出去
+        List<UserResponse> teachers = new ArrayList<>();
+        for (User teacher : parseUserJson(teamInfo.getTeacher())) {
+            teachers.add(toUserResponse(teacher));
+        }
         data.put("teacherMember", teachers);
         return data;
+    }
+
+    /**
+     * team.member / team.teacher 存的是 JSON 文本（text 列），可能为 null、空串或历史脏数据。
+     * 解析失败按「没有成员」处理，不让一条脏数据把整个报名页打挂。
+     */
+    private List<User> parseUserJson(String json) {
+        if (StringUtils.isEmpty(json)) {
+            return List.of();
+        }
+        try {
+            List<User> users = JSON.parseArray(json, User.class);
+            return users == null ? List.of() : users;
+        } catch (Exception e) {
+            log.warn("团队人员 JSON 解析失败，按空列表处理：{}", json, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 转成返回给前端的结构（学号 / 姓名 / 学院 / 专业 / 联系方式）。
+     * 学院名按 depId 查 department；extra 可能为 null（种子数据的 user.extra 就是 NULL）。
+     */
+    private UserResponse toUserResponse(User user) {
+        UserResponse response = new UserResponse();
+        response.setCode(user.getCode());
+        response.setName(user.getName());
+        if (user.getExtra() != null) {
+            response.setMajor(user.getExtra().getMajor());
+            response.setContact(user.getExtra().getContact());
+        }
+        if (user.getDepId() != null) {
+            Department department = departmentMapper.selectById(user.getDepId());
+            if (department != null) {
+                response.setCollege(department.getName());
+            }
+        }
+        return response;
     }
 
     @Override
