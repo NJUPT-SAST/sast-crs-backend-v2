@@ -216,7 +216,12 @@ public class FileServiceImpl implements FileService {
             log.warn("文件下载地址为空");
             throw new LocalRuntimeException(ErrorEnum.FILE_NOT_EXIST);
         }
-        url = URLDecoder.decode(url, StandardCharsets.UTF_8);
+        // 文件名里可能带裸 %（例如 50%off.pdf），解不开就按原样去比对，不要因此 500
+        try {
+            url = URLDecoder.decode(url, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            log.warn("文件下载地址无法解码，按原样处理：{}", url);
+        }
         File file = fileMapper.selectOne(new LambdaQueryWrapper<File>().eq(File::getUrl, url));
         if (file == null) {
             log.warn("地址无法在数据库中找到，URL： {} ", url);

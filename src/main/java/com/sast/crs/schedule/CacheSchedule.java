@@ -37,7 +37,8 @@ public class CacheSchedule {
      */
     @Scheduled(cron = "0 0 2 * * ?")
     public void cleanCacheTask() {
-        Set<String> keys = redisUtil.getKeys(RedisKeyConst.getWorkFileCacheKey("*", "*"));
+        // 按前缀扫描：既覆盖新格式（学号:比赛:字段），也能清掉历史遗留的两段式 key
+        Set<String> keys = redisUtil.getKeys(RedisKeyConst.WORK_FILE_PREFIX + "*");
         for (String key : keys) {
             FileCache cache = JSON.parseObject((String) redisUtil.getOriginal(key), FileCache.class);
             Duration duration = Duration.between(cache.getDate(), LocalDateTime.now());
