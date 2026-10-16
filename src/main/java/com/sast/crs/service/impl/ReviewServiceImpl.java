@@ -109,6 +109,10 @@ public class ReviewServiceImpl implements ReviewService {
                     depIds.add(Integer.parseInt(key));
                 }
             }
+            if (depIds.isEmpty()) {
+                // 没有排除任何学院，用哨兵值使 NOT IN 命中全部作品
+                depIds.add(-1);
+            }
             pages = reviewMapper.getProgramInfoNotIn(page, comId, depIds);
         } else {
             List<Integer> depIds = new ArrayList<>();
@@ -116,6 +120,10 @@ public class ReviewServiceImpl implements ReviewService {
                 if (settings.getString(key).equals(code)) {
                     depIds.add(Integer.parseInt(key));
                 }
+            }
+            if (depIds.isEmpty()) {
+                // 没有映射到自己的学院，用哨兵值使 IN 恒不命中
+                depIds.add(-1);
             }
             pages = reviewMapper.getProgramInfo(page, comId, depIds);
         }
