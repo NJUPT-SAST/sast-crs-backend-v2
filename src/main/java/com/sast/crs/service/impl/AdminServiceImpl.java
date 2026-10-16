@@ -3,9 +3,11 @@ package com.sast.crs.service.impl;
 import cn.hutool.core.io.FileTypeUtil;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.context.AnalysisContext;
+import com.alibaba.excel.metadata.data.ReadCellData;
 import com.alibaba.excel.read.listener.ReadListener;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sast.crs.entity.*;
@@ -23,6 +25,7 @@ import com.sast.crs.model.WhiteList;
 import com.sast.crs.service.AdminService;
 import com.sast.crs.util.AccountImportUtil;
 import com.sast.crs.util.COSUtil;
+import com.sast.crs.util.JudgeAssignColumns;
 import com.sast.crs.util.SecureUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -369,7 +372,8 @@ public class AdminServiceImpl implements AdminService {
             throw new LocalRuntimeException("该学号已存在，不可重复创建");
         }
         String name = requireText(request.getName(), "姓名不能为空");
-        String contact = requireText(request.getContact(), "联系方式不能为空");
+        // 联系方式允许不填：留空时 extra 落库为 NULL
+        String contact = trimToNull(request.getContact());
         String password = request.getPassword();
         if (password == null || password.length() < 6) {
             throw new LocalRuntimeException("密码至少 6 位");
@@ -381,13 +385,16 @@ public class AdminServiceImpl implements AdminService {
         // 评委账号不挂靠具体学院，沿用旧版导入学生时固定的默认部门
         user.setDepId(1);
         user.setRole(UserRoleEnum.JUDGE.getRole());
-        UserExtra extra = new UserExtra();
-        extra.setContact(contact);
-        user.setExtra(extra);
+        if (contact != null) {
+            UserExtra extra = new UserExtra();
+            extra.setContact(contact);
+            user.setExtra(extra);
+        }
         userMapper.insert(user);
     }
 
     @Override
+    @Transactional
     public void editJudgeAccount(JudgeAccountRequest request) {
         String code = requireText(request.getCode(), "学号不能为空");
         User user = userMapper.selectById(code);
@@ -398,16 +405,19 @@ public class AdminServiceImpl implements AdminService {
             throw new LocalRuntimeException("该学号不是评委账号");
         }
         String name = requireText(request.getName(), "姓名不能为空");
-        String contact = requireText(request.getContact(), "联系方式不能为空");
+        // 联系方式允许不填：留空表示清空，extra 落库为 NULL
+        String contact = trimToNull(request.getContact());
         User update = new User();
         update.setCode(code);
         update.setName(name);
-        UserExtra extra = user.getExtra();
-        if (extra == null) {
-            extra = new UserExtra();
+        if (contact != null) {
+            UserExtra extra = user.getExtra();
+            if (extra == null) {
+                extra = new UserExtra();
+            }
+            extra.setContact(contact);
+            update.setExtra(extra);
         }
-        extra.setContact(contact);
-        update.setExtra(extra);
         // 密码留空表示不重置
         String password = request.getPassword();
         if (password != null && !password.isEmpty()) {
@@ -417,6 +427,9 @@ public class AdminServiceImpl implements AdminService {
             update.setPassword(SecureUtil.encryptMD5(password));
         }
         userMapper.updateById(update);
+        if (contact == null) {
+            clearUserExtra(code);
+        }
     }
 
     @Override
@@ -451,7 +464,8 @@ public class AdminServiceImpl implements AdminService {
             throw new LocalRuntimeException("该学号已存在，不可重复创建");
         }
         String name = requireText(request.getName(), "姓名不能为空");
-        String contact = requireText(request.getContact(), "联系方式不能为空");
+        // 联系方式允许不填：留空时 extra 落库为 NULL
+        String contact = trimToNull(request.getContact());
         String password = request.getPassword();
         if (password == null || password.length() < 6) {
             throw new LocalRuntimeException("密码至少 6 位");
@@ -463,13 +477,16 @@ public class AdminServiceImpl implements AdminService {
         // 单个创建不传学院，沿用旧版导入学生时固定的默认部门
         user.setDepId(1);
         user.setRole(UserRoleEnum.COMMON_STUDENT.getRole());
-        UserExtra extra = new UserExtra();
-        extra.setContact(contact);
-        user.setExtra(extra);
+        if (contact != null) {
+            UserExtra extra = new UserExtra();
+            extra.setContact(contact);
+            user.setExtra(extra);
+        }
         userMapper.insert(user);
     }
 
     @Override
+    @Transactional
     public void editStudentAccount(StudentAccountRequest request) {
         String code = requireText(request.getCode(), "学号不能为空");
         User user = userMapper.selectById(code);
@@ -480,16 +497,19 @@ public class AdminServiceImpl implements AdminService {
             throw new LocalRuntimeException("该学号不是学生账号");
         }
         String name = requireText(request.getName(), "姓名不能为空");
-        String contact = requireText(request.getContact(), "联系方式不能为空");
+        // 联系方式允许不填：留空表示清空，extra 落库为 NULL
+        String contact = trimToNull(request.getContact());
         User update = new User();
         update.setCode(code);
         update.setName(name);
-        UserExtra extra = user.getExtra();
-        if (extra == null) {
-            extra = new UserExtra();
+        if (contact != null) {
+            UserExtra extra = user.getExtra();
+            if (extra == null) {
+                extra = new UserExtra();
+            }
+            extra.setContact(contact);
+            update.setExtra(extra);
         }
-        extra.setContact(contact);
-        update.setExtra(extra);
         // 密码留空表示不重置
         String password = request.getPassword();
         if (password != null && !password.isEmpty()) {
@@ -499,6 +519,9 @@ public class AdminServiceImpl implements AdminService {
             update.setPassword(SecureUtil.encryptMD5(password));
         }
         userMapper.updateById(update);
+        if (contact == null) {
+            clearUserExtra(code);
+        }
     }
 
     @Override
@@ -538,6 +561,25 @@ public class AdminServiceImpl implements AdminService {
         List<Judge> cachedDataList = new ArrayList<>();
         try {
             EasyExcel.read(file.getInputStream(), new ReadListener<Map<Integer, String>>() {
+                /** 表头里「评委学号」的列号，可有多列 */
+                private final List<Integer> judgeColumns = new ArrayList<>();
+                /** 存量文件没有「评委学号」表头时的回退起点 */
+                private int fallbackStart = JudgeAssignColumns.fallbackStart(null);
+
+                @Override
+                public void invokeHead(Map<Integer, ReadCellData<?>> headMap, AnalysisContext context) {
+                    Map<Integer, String> titles = new HashMap<>();
+                    headMap.forEach(
+                            (index, cell) -> titles.put(index, cell == null ? null : cell.getStringValue()));
+                    judgeColumns.addAll(JudgeAssignColumns.detect(titles));
+                    fallbackStart = JudgeAssignColumns.fallbackStart(titles);
+                    if (judgeColumns.isEmpty()) {
+                        log.info("分配评委表没有「评委学号」表头，回退为从第 {} 列开始读评委学号", fallbackStart);
+                    } else {
+                        log.info("分配评委表按表头读取评委学号，列号: {}", judgeColumns);
+                    }
+                }
+
                 @Override
                 public void invoke(Map<Integer, String> data, AnalysisContext analysisContext) {
                     String idText = data.get(0);
@@ -562,17 +604,20 @@ public class AdminServiceImpl implements AdminService {
                         log.warn("作品id:{}未通过审核，跳过分配评委", id);
                         return;
                     }
-                    // 判断这个比赛是否已经分配评委，已经分配的话此时需要覆盖掉这些数据
-                    judgeMapper.delete(new QueryWrapper<Judge>().eq("user_code", userCode).eq("com_id", comId));
-
-                    Set<String> codes = new HashSet<>();
-                    // excel表从第三格开始为评委学号
-                    for (int i = 2; i < data.size(); i++) {
-                        String judgeCode = data.get(i);
-                        if (judgeCode == null || judgeCode.trim().isEmpty()) {
-                            continue;
-                        }
-                        codes.add(judgeCode.trim());
+                    // 评委学号：优先按「评委学号」表头取，存量文件回退到列号约定
+                    Set<String> codes = new LinkedHashSet<>();
+                    if (judgeColumns.isEmpty()) {
+                        data.forEach((index, value) -> {
+                            if (index != null && index >= fallbackStart) {
+                                addJudgeCode(codes, value);
+                            }
+                        });
+                    } else {
+                        judgeColumns.forEach(index -> addJudgeCode(codes, data.get(index)));
+                    }
+                    // 一行都没读到就直接失败：以前是先删旧分配再静默通过，误操作会被吞掉
+                    if (codes.isEmpty()) {
+                        throw new LocalRuntimeException("作品id:" + id + " 没有填写评委学号");
                     }
                     for (String judgeCode : codes) {
                         // 判断评委学号是否存在
@@ -580,6 +625,10 @@ public class AdminServiceImpl implements AdminService {
                             log.error("学号{}不存在", judgeCode);
                             throw new LocalRuntimeException(USER_NOT_EXIST);
                         }
+                    }
+                    // 学号全部校验通过后再覆盖旧分配，避免「学号写错就把原有评委清空」
+                    judgeMapper.delete(new QueryWrapper<Judge>().eq("user_code", userCode).eq("com_id", comId));
+                    for (String judgeCode : codes) {
                         Judge judge = new Judge();
                         judge.setJudgeCode(judgeCode);
                         judge.setComId(comId);
@@ -683,6 +732,42 @@ public class AdminServiceImpl implements AdminService {
             throw new LocalRuntimeException(message);
         }
         return value.trim();
+    }
+
+    /**
+     * 允许留空的文本字段：去除首尾空白，空串归一为 null（落库为 NULL）
+     *
+     * @param value 待处理文本，可为 null
+     * @return 去空白后的文本，没有内容时返回 null
+     */
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /**
+     * 清空账号的 extra（联系方式）。
+     * MyBatis-Plus 默认的 updateById 会跳过 null 字段，清空必须用 UpdateWrapper 显式写 NULL。
+     *
+     * @param code 学号
+     */
+    private void clearUserExtra(String code) {
+        userMapper.update(null, new UpdateWrapper<User>().eq("code", code).set("extra", null));
+    }
+
+    /**
+     * 收集评委学号：去掉首尾空白，空白单元格忽略
+     *
+     * @param codes 收集容器
+     * @param value 单元格文本
+     */
+    private static void addJudgeCode(Set<String> codes, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            codes.add(value.trim());
+        }
     }
 
 }
