@@ -8,7 +8,9 @@ CREATE DATABASE IF NOT EXISTS `crs` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb
 USE `crs`;
 
 CREATE TABLE `department` (
-  `id` varchar(255) NOT NULL,
+  -- 学院代号，实体（Department.id）是 Integer，必须是数值类型：
+  -- 写成 varchar 会让 ORDER BY id 变成字典序（1,10,11,…,2,20,3），学院下拉顺序错乱
+  `id` int NOT NULL,
   `name` varchar(255) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -15,7 +15,8 @@
 	<description>CommonReviewSystem</description>
 	<properties>
 		<java.version>21</java.version>
-		<maven.test.skip>true</maven.test.skip>
+		<!-- 曾经写死 true，导致 src/test 下的测试在本地、CI（mvn package）和镜像构建里都不执行 -->
+		<maven.test.skip>false</maven.test.skip>
 	</properties>
 	<dependencies>
 		<dependency>

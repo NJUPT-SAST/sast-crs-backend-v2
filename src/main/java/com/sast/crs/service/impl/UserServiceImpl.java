@@ -182,8 +182,8 @@ public class UserServiceImpl implements UserService {
             throw new LocalRuntimeException(ErrorEnum.INVALID_FILE_TYPE_ERROR);
         }
 
-        // 检查redis缓存
-        String key = RedisKeyConst.getWorkFileCacheKey(user.getCode(), input);
+        // 检查redis缓存：同一比赛、同一字段上次留下的文件要先清掉
+        String key = RedisKeyConst.getWorkFileCacheKey(user.getCode(), comId, input);
         if (redisUtil.hasKey(key)) {
             FileCache cache = JSON.parseObject((String) redisUtil.get(key), FileCache.class);
             cosUtil.deleteFile(cache.getUrl(), COSUtil.Folder.PRIVATE);
@@ -196,7 +196,8 @@ public class UserServiceImpl implements UserService {
         uploadFile.setInput(input);
         uploadFile.setUrl(urlMap.get("clearUrl"));
         uploadFile.setDate(LocalDateTime.now());
-        redisUtil.set(key, JSON.toJSONString(uploadFile));
+        // 2 小时足够覆盖「取凭证 -> 提交作品」；不能不留过期时间，一条坏缓存会把该字段永久卡死
+        redisUtil.set(key, JSON.toJSONString(uploadFile), 2 * 60 * 60);
         return urlMap;
     }
 
@@ -312,7 +313,7 @@ public class UserServiceImpl implements UserService {
             workSchema.setIsFile(false);
             // 单独处理文件
             if (cosUtil.isBucketURL(content)) {
-                String key = RedisKeyConst.getWorkFileCacheKey(user.getCode(), title);
+                String key = RedisKeyConst.getWorkFileCacheKey(user.getCode(), competition.getId(), title);
                 File fileDB = fileDBMap.get(title);
                 if (fileDB == null) {
                     if (!redisUtil.hasKey(key))

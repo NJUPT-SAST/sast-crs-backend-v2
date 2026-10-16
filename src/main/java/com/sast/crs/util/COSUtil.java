@@ -1,9 +1,8 @@
 package com.sast.crs.util;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URI;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -117,10 +116,15 @@ public class COSUtil {
      */
     public void deleteFile(String url, Folder folder) {
         log.info("删除COS中的文件，文件地址：{}", url);
-        String baseFolderName = getBaseFolderName(folder);
-        String objectName = getObjectNameCOS(url);
-        String key = baseFolderName + "/" + objectName;
-        cosClient.deleteObject(bucketName, key);
+        try {
+            String baseFolderName = getBaseFolderName(folder);
+            String objectName = getObjectNameCOS(url);
+            String key = baseFolderName + "/" + objectName;
+            cosClient.deleteObject(bucketName, key);
+        } catch (Exception e) {
+            // 删掉上一次的旧文件失败不应该阻断本次上传：过去这里抛出 3007 会把整个换文件流程卡死
+            log.warn("删除COS文件失败，已忽略。文件地址：{}", url, e);
+        }
     }
 
     /**
@@ -190,13 +194,16 @@ public class COSUtil {
     public Boolean isBucketURL(String content) {
         if (StringUtils.isEmpty(content))
             return false;
-        try {
-            String hostFromUser = URI.create(content).toURL().getHost();
-            String host = endpoint.substring(8);
-            return host.equalsIgnoreCase(hostFromUser);
-        } catch (MalformedURLException | IllegalArgumentException e) {
-            return false;
+        // 不能用 URI 解析：带空格/方括号的文件 URL 会被判成非法，从而误判为「不是本 Bucket 的文件」，
+        // 后果是该字段在提交作品时被当成普通文本，file 表不登记、审核页看不到附件。
+        String rest = content;
+        int schemeIndex = rest.indexOf("://");
+        if (schemeIndex >= 0) {
+            rest = rest.substring(schemeIndex + 3);
         }
+        int slashIndex = rest.indexOf('/');
+        String host = slashIndex >= 0 ? rest.substring(0, slashIndex) : rest;
+        return endpoint.substring("https://".length()).equalsIgnoreCase(host);
     }
 
     /**
@@ -212,6 +219,18 @@ public class COSUtil {
     }
 
     /**
+     * 解回对象名。URLDecoder 会把 + 当成空格（表单语义），而对象名里的 + 是字面量，先保护起来。
+     * 存量 URL 里可能有裸 %（文件名本身带 %），解不开就按原样返回。
+     */
+    private static String percentDecode(String path) {
+        try {
+            return URLDecoder.decode(path.replace("+", "%2B"), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return path;
+        }
+    }
+
+    /**
      * 通过URL获取文件路径（COS）
      *
      * @param urlString 文件的地址 例：https://endpoint/path/filename.zip
@@ -219,13 +238,31 @@ public class COSUtil {
      */
     @NotNull
     public static String getObjectName(String urlString) {
-        URL url;
-        try {
-            url = URI.create(urlString).toURL();
-        } catch (MalformedURLException | IllegalArgumentException e) {
+        if (StringUtils.isEmpty(urlString)) {
             throw new LocalRuntimeException(ErrorEnum.INVALID_URL_ERROR);
         }
-        return url.getPath().substring(1);
+        // 不用 URI / URL 解析：文件名里的空格、方括号、# 会让它们直接抛异常，或者按 fragment
+        // 静默截断，结果都是拿到一个错误的 key（删错对象、还原错文件名）。
+        String rest = urlString;
+        int schemeIndex = rest.indexOf("://");
+        if (schemeIndex >= 0) {
+            rest = rest.substring(schemeIndex + 3);
+        }
+        int slashIndex = rest.indexOf('/');
+        if (slashIndex < 0) {
+            throw new LocalRuntimeException(ErrorEnum.INVALID_URL_ERROR);
+        }
+        String path = rest.substring(slashIndex + 1);
+        // 预签名 URL 的查询串（?q-sign-...）不属于对象名。只截 ? 不截 #：Windows 文件名里
+        // # 合法、? 不合法，所以库里的 # 属于对象名本身，不能当 fragment 丢掉。
+        int queryIndex = path.indexOf('?');
+        if (queryIndex >= 0) {
+            path = path.substring(0, queryIndex);
+        }
+        if (path.isEmpty()) {
+            throw new LocalRuntimeException(ErrorEnum.INVALID_URL_ERROR);
+        }
+        return percentDecode(path);
     }
 
     /**
@@ -262,6 +299,8 @@ public class COSUtil {
     private Map<String, String> createUploadCertificate(String objectName, Folder folder) {
         String baseFolderName = getBaseFolderName(folder);
         String key = baseFolderName + "/" + objectName;
+        // 必须保持原始形态（含空格、#、中文）：file.url 就是拿它按字符串查库的，
+        // FileServiceImpl.getDownloadCertificate 会先 URLDecoder.decode 再比对。
         String clearUrl = endpoint + "/" + key;
         log.info("向COS获取上传凭证，文件地址：{}", clearUrl);
         Date expirationDate = new Date(System.currentTimeMillis() + uploadExpiredTime * 60 * 1000);
@@ -294,6 +333,7 @@ public class COSUtil {
     private String uploadFile(MultipartFile file, @NotNull String objectName, Folder folder) {
         String baseFolderName = getBaseFolderName(folder);
         String key = baseFolderName + "/" + objectName;
+        // 同 createUploadCertificate：保持原始形态，转义会破坏「按 url 查库」的下载链路
         String clearUrl = endpoint + "/" + key;
         log.info("向COS上传文件，文件地址：{}", clearUrl);
         try {
