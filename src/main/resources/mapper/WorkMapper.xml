@@ -24,6 +24,8 @@
         <result column="memberJson"     property="memberJson"/>
         <result column="captainName"    property="captainName"/>
         <result column="schema_content" property="schemaContent"/>
+        <result column="review_accept"  property="accept"/>
+        <result column="review_opinion" property="opinion"/>
     </resultMap>
     <select id="selectListForExcel" resultMap="ListForExcelMap">
         SELECT w.id,
@@ -33,7 +35,19 @@
                t.name   AS teamName,
                t.member AS memberJson,
                u.name   AS captainName,
-               w.schema_content
+               w.schema_content,
+               -- 审核结论（true=通过 / false=未通过 / null=未审核）与审核意见。
+               -- 用子查询而不是 JOIN：不依赖 review 的唯一键，review 有重复行时也不会把作品导出成多行
+               (SELECT r.accept
+                FROM review r
+                WHERE r.com_id = w.com_id
+                  AND r.user_code = w.user_code
+                LIMIT 1) AS review_accept,
+               (SELECT r.opinion
+                FROM review r
+                WHERE r.com_id = w.com_id
+                  AND r.user_code = w.user_code
+                LIMIT 1) AS review_opinion
         FROM work w
                  JOIN team t
                       ON t.com_id = w.com_id

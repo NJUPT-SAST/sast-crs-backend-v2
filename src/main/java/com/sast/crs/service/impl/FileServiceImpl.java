@@ -115,6 +115,13 @@ public class FileServiceImpl implements FileService {
         List<String> workType = ListUtils.newArrayList();
         workType.add("项目类别");
         list.add(workType);
+        // 放在最后两列：前面各列的位置保持不变，按列序号解析的脚本不会受影响
+        List<String> reviewPassed = ListUtils.newArrayList();
+        reviewPassed.add("是否通过");
+        list.add(reviewPassed);
+        List<String> reviewReason = ListUtils.newArrayList();
+        reviewReason.add("未通过原因");
+        list.add(reviewReason);
         return list;
     }
 
@@ -122,7 +129,7 @@ public class FileServiceImpl implements FileService {
      * 获取excel标题数据
      *
      * @param comId 活动id
-     * @return 导出参赛信息excel所需要的数据：作品ID、比赛名称、队长学号、队员学号、作品名称、项目类别
+     * @return 导出参赛信息excel所需要的数据：作品ID、比赛名称、队长学号、队员学号、作品名称、项目类别、是否通过、未通过原因
      */
     private List<List<String>> dataList(Long comId, Integer maxTeamMembers, String competitionName) {
         List<List<String>> dataList = ListUtils.newArrayList();
@@ -154,9 +161,37 @@ public class FileServiceImpl implements FileService {
             }
             tempData.add(work.getWorkName());
             tempData.add(getWorkType(work.getSchemaContent()));
+            // 是否通过：通过 / 未通过 / 未审核
+            Boolean accept = work.getAccept();
+            tempData.add(reviewResultText(accept));
+            // 未通过原因：只在未通过时填审核意见，通过 / 未审核的行留空
+            tempData.add(Boolean.FALSE.equals(accept) ? nullToEmpty(work.getOpinion()) : "");
             dataList.add(tempData);
         }
         return dataList;
+    }
+
+    /**
+     * 审核结论的展示文案
+     *
+     * @param accept 审核结果，null 表示还没审核
+     * @return 通过 / 未通过 / 未审核
+     */
+    private static String reviewResultText(Boolean accept) {
+        if (accept == null) {
+            return "未审核";
+        }
+        return accept ? "通过" : "未通过";
+    }
+
+    /**
+     * null 转空串，避免 EasyExcel 写出空单元格时出现 null 字样
+     *
+     * @param value 原始文本
+     * @return 非 null 的文本
+     */
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private final JsonMapper objectMapper = JsonMapper.builder().build();

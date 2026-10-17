@@ -16,4 +16,12 @@ public class WorkForExcel {
     private String memberJson;
     private String captainName;
     private String schemaContent;
+    /**
+     * 审核结论：true=通过，false=未通过，null=未审核（比赛不需要审核时也是 null）
+     */
+    private Boolean accept;
+    /**
+     * 审核意见，导出时作为「未通过原因」
+     */
+    private String opinion;
 }
