@@ -15,6 +15,21 @@
         WHERE com_id = #{comId}
         LIMIT #{pageSize} OFFSET #{pageNum}
     </select>
+    <select id="selectApprovedForJudgeTemplate" resultType="com.sast.crs.entity.Work">
+        SELECT w.id,
+               w.work_name,
+               w.schema_content
+        FROM work w
+        WHERE w.com_id = #{comId}
+          AND EXISTS (
+              SELECT 1
+              FROM review r
+              WHERE r.com_id = w.com_id
+                AND r.user_code = w.user_code
+                AND r.accept = 1
+          )
+        ORDER BY w.id DESC
+    </select>
     <resultMap id="ListForExcelMap" type="com.sast.crs.model.WorkForExcel">
         <result column="id"             property="id"/>
         <result column="work_name"      property="workName"/>

@@ -12,6 +12,9 @@ import java.util.List;
 public interface WorkMapper extends BaseMapper<Work> {
     int upsertWork(Work work);
 
+    /** 评委模板仅包含审批通过的作品。 */
+    List<Work> selectApprovedForJudgeTemplate(@Param("comId") Long comId);
+
     List<Work> getWorks(@Param("pageNum") Integer pageNum, @Param("pageSize") Integer pageSize, @Param("comId") Long comId);
 
     List<WorkForExcel> selectListForExcel(@Param("comId") Long comId);

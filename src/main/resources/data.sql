@@ -21,7 +21,7 @@ INSERT INTO `department` (`id`, `name`) VALUES
   ('17', '外国语学院'),
   ('18', '教育科学与技术学院'),
   ('19', '贝尔英才学院'),
-  ('20', '波特兰学院')
+  ('20', '波特兰学院、欧洲塞浦路斯学院')
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`);
 

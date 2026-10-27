@@ -198,23 +198,35 @@ public class FileServiceImpl implements FileService {
 
     @Override
     public List<WorkOutput> exportFileData(Long comId) {
-        QueryWrapper<Work> workQueryWrapper = new QueryWrapper<>();
-        workQueryWrapper.select("id", "work_name", "schema_content").eq("com_id", comId);
-        List<Work> workList = workMapper.selectList(workQueryWrapper);
+        List<Work> workList = workMapper.selectApprovedForJudgeTemplate(comId);
         ArrayList<WorkOutput> outputs = new ArrayList<>();
-        if (workList.isEmpty()) {
-            throw new LocalRuntimeException(ErrorEnum.FILE_NOT_EXIST);
-        }
 
         for (Work work : workList) {
             WorkOutput workOutput = new WorkOutput();
             workOutput.setName(work.getWorkName());
             workOutput.setId(work.getId());
+            workOutput.setCollege(getCollege(work));
             workOutput.setType(getWorkType(work));
             outputs.add(workOutput);
         }
 
         return outputs;
+    }
+
+    private String getCollege(Work work) {
+        try {
+            JsonNode node = objectMapper.readTree(work.getSchemaContent());
+            for (JsonNode sub : node) {
+                JsonNode input = sub.get("input");
+                if (input != null && "学院".equals(input.asString())) {
+                    JsonNode content = sub.get("content");
+                    return content == null || content.isNull() ? null : content.asString();
+                }
+            }
+        } catch (Exception e) {
+            throw new LocalRuntimeException("解析作品学院失败");
+        }
+        return null;
     }
 
     private String getWorkType(Work work) {
